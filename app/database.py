@@ -22,11 +22,13 @@ Base = declarative_base()
 # ==============================
 # Таблица пользователей
 # ==============================
+
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     uuid = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
     username = Column(String, unique=True, index=True, nullable=False)
+    funpay_username = Column(String, unique=False, index=True, nullable=True)
 
     api_tokens = relationship("APIToken", back_populates="user")
     whitelist_entries = relationship("WhitelistedEntry", back_populates="user")
@@ -38,6 +40,7 @@ class User(Base):
 # ==============================
 # Таблица API ключей
 # ==============================
+
 class APIToken(Base):
     __tablename__ = "api_tokens"
     id = Column(Integer, primary_key=True, index=True)
@@ -52,8 +55,8 @@ class APIToken(Base):
     """
     Уровни доступа:
     0 — только чтение
-    1 — базовые действия (добавлять/удалять whitelist, создавать токены)
-    2 — полный доступ (удаление токенов, настройка сервера, управление системой)
+    1 — базовые действия (добавлять/удалять whitelist, создавать токены, регистрация новых пользователей, удаление токенов уровня 0)
+    2 — полный доступ (удаление токенов (всех), настройка сервера, управление системой)
     """
 
     user = relationship("User", back_populates="api_tokens")
@@ -66,6 +69,7 @@ class APIToken(Base):
 # ==============================
 # Таблица аудита запросов
 # ==============================
+
 class RequestAudit(Base):
     __tablename__ = "request_audit"
     id = Column(Integer, primary_key=True, index=True)
@@ -84,6 +88,7 @@ class RequestAudit(Base):
 # ==============================
 # Таблица белого списка (IP или домены)
 # ==============================
+
 class WhitelistedEntry(Base):
     __tablename__ = "whitelisted_entries"
     id = Column(Integer, primary_key=True, index=True)
@@ -100,6 +105,7 @@ class WhitelistedEntry(Base):
 # ==============================
 # Инициализация базы данных
 # ==============================
+
 logger.info("Creating all tables in the database (if not exist)")
 Base.metadata.create_all(bind=engine)
 logger.info("Database tables created or already exist")

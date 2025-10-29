@@ -7,11 +7,10 @@
 from fastapi import Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 from urllib.parse import urlparse
-from app.database import APIToken, WhitelistedEntry, RequestAudit, SessionLocal
-from app.auth import get_current_user, decrypt_token, get_api_token_from_header
+from app.database import WhitelistedEntry, RequestAudit, SessionLocal
+from app.auth import get_current_user, get_api_token_from_header
 from app.config import settings
 from cl import logger
-from app.audit import log_api_access
 
 def get_db():
     db = SessionLocal()

@@ -75,16 +75,16 @@ def decrypt_token(token_enc: Optional[str]) -> Optional[str]:
         return None
 
 
-def generate_api_token(db: Session, name: str, user_id: int, access_level: int = 0) -> Dict[str, Any]:
+def generate_api_token(db: Session, name: str, user_id: int, access_level: int = 0, description: str = None) -> Dict[str, Any]:
     raw_token = secrets.token_urlsafe(32)
     encrypted = encrypt_token(raw_token)
-    api = APIToken(name=name, key=encrypted, user_id=user_id, access_level=access_level, description=None)
+    api = APIToken(name=name, key=encrypted, user_id=user_id, access_level=access_level, description=description)
     db.add(api)
     db.commit()
     db.refresh(api)
     logger.info(f"Generated API token {name} for user_id={user_id}")
     # возвращаем незашифрованный ключ пользователю (один раз)
-    return {"name": name, "token": raw_token, "uuid": api.uuid}
+    return {"name": name, "token": encrypted, "uuid": api.uuid, "access_level": access_level, "description": description}
 
 
 def get_api_token_from_header(request: Request, db: Session) -> Optional[APIToken]:

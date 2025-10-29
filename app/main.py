@@ -5,7 +5,7 @@
 """
 
 from fastapi import FastAPI
-from app.routers import white_domains
+from app.routers import white_domains, auth
 from fastapi.middleware.cors import CORSMiddleware
 from cl import logger
 import time
@@ -51,3 +51,4 @@ def ping():
 # Подключаем роутеры
 logger.info("Including routers")
 app.include_router(white_domains.router)
+app.include_router(auth.router)

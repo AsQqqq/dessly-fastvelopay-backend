@@ -1,0 +1,417 @@
+"""
+Модуль авторизации и проверки API-токенов.
+Позволяет пользователю входить по токену, проверять уровень доступа и создавать новых пользователей.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Header, Request, Query
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional, List
+from cl import logger
+from app.auth import get_api_token_from_header, generate_api_token
+from app.database import APIToken, User, RequestAudit
+from app.dependencies import get_db
+
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ==============================
+# Модели Pydantic
+# ==============================
+
+class TokenInfoResponse(BaseModel):
+    username: str
+    token_name: str
+    access_level: int
+    description: Optional[str] = None
+
+class UserRegisterRequest(BaseModel):
+    username: str
+
+class UserRegisterResponse(BaseModel):
+    username: str
+    uuid: str
+
+class UserListItem(BaseModel):
+    username: str
+    uuid: str
+
+class APITokenCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    access_level: int = 0
+
+class APITokenListItem(BaseModel):
+    name: str
+    uuid: str
+    access_level: int
+    description: Optional[str] = None
+    key: str
+
+class UserTokenInfo(BaseModel):
+    name: str
+    uuid: str
+    access_level: int
+    description: Optional[str] = None
+
+class UserDetailResponse(BaseModel):
+    username: str
+    uuid: str
+    tokens: List[UserTokenInfo] = []
+
+# ==============================
+# Утилиты
+# ==============================
+
+def create_audit_record(db: Session, request: Request, api_token: APIToken):
+    """Создаёт запись аудита в базе данных."""
+    audit = RequestAudit(
+        path=request.url.path,
+        method=request.method,
+        client_ip=request.client.host,
+        api_token_id=api_token.id,
+    )
+    db.add(audit)
+    db.commit()
+
+
+def get_token_from_header(authorization: Optional[str]) -> str:
+    """Извлекает токен из заголовка Authorization: Bearer <token>"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Токен не предоставлен")
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Неверный формат заголовка Authorization")
+    return parts[1]
+
+
+def require_access_level(token: APIToken, min_level: int):
+    """Проверяет, что токен имеет необходимый уровень доступа."""
+    if token.access_level < min_level:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Недостаточно прав.",
+        )
+
+
+def get_api_token_from_header(
+    authorization: Optional[str],
+    db: Session
+) -> APIToken:
+    """Возвращает объект APIToken по заголовку Authorization"""
+    token_value = get_token_from_header(authorization)
+    if not token_value:
+        raise HTTPException(status_code=401, detail="Токен не предоставлен")
+
+    token = db.query(APIToken).filter(APIToken.key == token_value).first()
+    if not token:
+        raise HTTPException(status_code=401, detail="Неверный или недействительный токен")
+    return token
+
+
+# ==============================
+# Пользователи
+# ==============================
+
+@router.get("/check", response_model=TokenInfoResponse)
+def check_token(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Проверка валидности токена через Authorization: Bearer <token>"""
+    token = get_api_token_from_header(authorization, db)
+    create_audit_record(db, request, token)
+    return TokenInfoResponse(
+        username=token.user.username,
+        token_name=token.name,
+        access_level=token.access_level,
+        description=token.description,
+    )
+
+
+@router.post("/register", response_model=UserRegisterResponse, status_code=201)
+def register_user(
+    request_data: UserRegisterRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Регистрация нового пользователя.
+    Доступ: уровень 1+
+    """
+    token = get_api_token_from_header(authorization, db)
+    require_access_level(token, 1)
+
+    existing = db.query(User).filter(User.username == request_data.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Пользователь с таким именем уже существует")
+
+    new_user = User(username=request_data.username)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    logger.info(f"{token.user.username} создал нового пользователя: {new_user.username}")
+
+    return UserRegisterResponse(username=new_user.username, uuid=new_user.uuid)
+
+
+@router.get("/levels", response_model=list)
+def list_access_levels(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    """Описание уровней доступа"""
+
+    token = get_api_token_from_header(authorization, db)
+    require_access_level(token, 2)
+
+    return [
+        {"access_level": 0, "description": "Только чтение"},
+        {"access_level": 1, "description": "Базовые действия (создание пользователей, whitelist)"},
+        {"access_level": 2, "description": "Полный доступ (удаление токенов, управление системой)"},
+    ]
+
+
+@router.get("/users", response_model=List[UserListItem])
+def list_users(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(1000, le=1000),
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Получить список пользователей с пагинацией (уровень 1+)"""
+    token = get_api_token_from_header(authorization, db)
+    require_access_level(token, 1)
+
+    users = db.query(User).offset(offset).limit(limit).all()
+    return [UserListItem(username=u.username, uuid=u.uuid) for u in users]
+
+
+@router.get("/user/{user_uuid}", response_model=UserDetailResponse)
+def get_user_by_uuid(
+    user_uuid: str,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Получение информации о пользователе по UUID вместе с его токенами.
+    - Уровень 1: показываются только токены уровня 0
+    - Уровень 2: показываются все токены
+    """
+    token = get_api_token_from_header(authorization, db)
+    require_access_level(token, 1)
+
+    user = db.query(User).filter(User.uuid == user_uuid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # фильтрация токенов по уровню запроса
+    tokens_query = user.api_tokens
+    if token.access_level == 1:
+        tokens_query = [t for t in tokens_query if t.access_level == 0]
+
+    tokens_info = [
+        UserTokenInfo(
+            name=t.name,
+            uuid=t.uuid,
+            access_level=t.access_level,
+            description=t.description
+        ) for t in tokens_query
+    ]
+
+    return UserDetailResponse(
+        username=user.username,
+        uuid=user.uuid,
+        tokens=tokens_info
+    )
+
+
+# ==============================
+# Токены
+# ==============================
+
+@router.post("/user/{user_uuid}/token/create", response_model=APITokenListItem, status_code=201)
+def create_token_for_user(
+    user_uuid: str,
+    token_data: APITokenCreateRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Создание нового API токена для пользователя по UUID"""
+    # Получаем токен того, кто делает запрос
+    token = get_api_token_from_header(authorization, db)
+    require_access_level(token, 1)
+
+    # Находим пользователя
+    user = db.query(User).filter(User.uuid == user_uuid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Определяем уровень создаваемого токена
+    if token.access_level == 1:
+        access_level = 0  # для уровня 1 всегда создаем токен уровня 0
+    else:
+        access_level = token_data.access_level  # уровень 2 может задавать любой уровень
+
+    new_token_info = generate_api_token(
+        db,
+        name=token_data.name,
+        description=token_data.description if token_data.description else None,
+        user_id=user.id,
+        access_level=access_level
+    )
+
+    logger.info(
+        f"{token.user.username} создал токен '{token_data.name}' "
+        f"для {user.username} с уровнем {access_level}"
+    )
+
+    return APITokenListItem(
+        name=new_token_info["name"],
+        uuid=new_token_info["uuid"],
+        key=new_token_info["token"],
+        access_level=new_token_info["access_level"],
+        description=new_token_info.get("description")
+    )
+
+
+
+@router.get("/user/{token_uuid}/token/data", response_model=APITokenListItem, status_code=200)
+def get_token_data(
+    token_uuid: str,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Получение информации о токене по его UUID
+    - Уровень 1: можно просматривать только токены с access_level=0
+    - Уровень 2: можно просматривать все токены
+    """
+
+    requester_token = get_api_token_from_header(authorization, db)
+    require_access_level(requester_token, 1)
+
+    api_token = db.query(APIToken).filter(APIToken.uuid == token_uuid).first()
+    if not api_token:
+        raise HTTPException(status_code=404, detail="Токен не найден")
+
+    # Проверка прав
+    if requester_token.access_level == 1 and api_token.access_level > 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав."
+        )
+
+    return APITokenListItem(
+        name=api_token.name,
+        uuid=api_token.uuid,
+        access_level=api_token.access_level,
+        description=api_token.description,
+        key=api_token.key
+    )
+
+
+# ==============================
+# Удаление токена
+# ==============================
+
+@router.delete("/token/{token_uuid}", status_code=204)
+def delete_token(
+    token_uuid: str,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    requester_token = get_api_token_from_header(authorization, db)
+    require_access_level(requester_token, 1)
+
+    token_to_delete = db.query(APIToken).filter(APIToken.uuid == token_uuid).first()
+    if not token_to_delete:
+        raise HTTPException(status_code=404, detail="Токен не найден")
+
+    # Проверка прав
+    if requester_token.access_level == 1 and token_to_delete.access_level > 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Недостаточно прав."
+        )
+
+    db.delete(token_to_delete)
+    db.commit()
+    logger.info(f"{requester_token.user.username} удалил токен '{token_to_delete.name}'")
+    return
+
+
+# ==============================
+# Редактирование токена
+# ==============================
+
+class APITokenUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    access_level: Optional[int] = None  # только для уровня 2
+
+@router.put("/token/{token_uuid}/update", response_model=APITokenListItem)
+def update_token(
+    token_uuid: str,
+    token_data: APITokenUpdateRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    requester_token = get_api_token_from_header(authorization, db)
+    require_access_level(requester_token, 2)
+
+    api_token = db.query(APIToken).filter(APIToken.uuid == token_uuid).first()
+    if not api_token:
+        raise HTTPException(status_code=404, detail="Токен не найден")
+
+    if token_data.name:
+        api_token.name = token_data.name
+    if token_data.description:
+        api_token.description = token_data.description
+    if token_data.access_level is not None:
+        if token_data.access_level not in [0, 1, 2]:
+            raise HTTPException(status_code=400, detail="Неверный уровень доступа")
+        api_token.access_level = token_data.access_level
+
+    db.commit()
+    db.refresh(api_token)
+    logger.info(f"{requester_token.user.username} обновил токен '{api_token.name}'")
+    return APITokenListItem(
+        name=api_token.name,
+        uuid=api_token.uuid,
+        access_level=api_token.access_level,
+        description=api_token.description,
+        key="********"
+    )
+
+
+# ==============================
+# Редактирование username пользователя
+# ==============================
+
+class UserUpdateRequest(BaseModel):
+    username: str
+
+@router.put("/user/{user_uuid}/update", response_model=UserRegisterResponse)
+def update_user(
+    user_uuid: str,
+    user_data: UserUpdateRequest,
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+):
+    requester_token = get_api_token_from_header(authorization, db)
+    require_access_level(requester_token, 2)
+
+    user = db.query(User).filter(User.uuid == user_uuid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Проверка на уникальность
+    existing = db.query(User).filter(User.username == user_data.username).first()
+    if existing and existing.id != user.id:
+        raise HTTPException(status_code=400, detail="Пользователь с таким именем уже существует")
+
+    user.username = user_data.username
+    db.commit()
+    db.refresh(user)
+    logger.info(f"{requester_token.user.username} обновил username пользователя '{user.username}'")
+    return UserRegisterResponse(username=user.username, uuid=user.uuid)
