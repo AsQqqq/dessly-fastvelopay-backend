@@ -91,7 +91,9 @@ class RequestAudit(Base):
 
 class WhitelistedEntry(Base):
     __tablename__ = "whitelisted_entries"
+
     id = Column(Integer, primary_key=True, index=True)
+    uuid = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
     value = Column(String, unique=True, nullable=False, index=True)  # ip/domain
     added_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -99,7 +101,8 @@ class WhitelistedEntry(Base):
     user = relationship("User", back_populates="whitelist_entries")
 
     def __repr__(self):
-        return f"<WhitelistedEntry(value={self.value}, user_id={self.user_id})>"
+        return f"<WhitelistedEntry(uuid={self.uuid}, value={self.value}, user_id={self.user_id})>"
+
 
 
 # ==============================

@@ -5,10 +5,16 @@
 """
 
 from fastapi import FastAPI
+from fastapi import Depends, Header, Request
+from typing import Optional
 from app.routers import white_domains, auth
 from fastapi.middleware.cors import CORSMiddleware
+from app.dependencies import get_db
+from sqlalchemy.orm import Session
+from app.auth import require_access_level, get_api_token_from_header, create_audit_record
 from cl import logger
-import time
+import time, json
+from app.config import CONFIG_PATH, load_config, config_cache
 import collections
 
 # Отключаем автогенерацию docs
@@ -47,6 +53,72 @@ app.add_middleware(
 def ping():
     """Простой роут для проверки доступности сервиса."""
     return {"message": "pong"}
+
+
+@app.get("/config",
+    name="Get Config",
+    description="Читает и возвращает текущий конфиг из config.json.",
+    tags=["Config"])
+def get_config(authorization: Optional[str] = Header(None), request: Request = None, db: Session = Depends(get_db)):
+    """
+    Читает и возвращает текущий конфиг из config.json.
+    Доступ: уровень 2+
+    """
+
+    token = get_api_token_from_header(authorization, db)
+    require_access_level(token, min_level=2)
+    create_audit_record(db, request, token)
+
+    load_config()  # Обновляем кэш перед чтением
+    return config_cache
+
+
+@app.post("/config",
+    name="Update Config",
+    description="Обновляет настройку в config.json по ключу и значению. Принимает JSON: {\"key\": \"whitelist_enabled\", \"value\": false}.",
+    tags=["Config"])
+def update_config(data: dict, authorization: Optional[str] = Header(None), request: Request = None, db: Session = Depends(get_db)):
+    """
+    Обновляет настройку в config.json по ключу и значению.
+    Доступ: уровень 2+
+    """
+
+    token = get_api_token_from_header(authorization, db)
+    require_access_level(token, min_level=2)
+    create_audit_record(db, request, token)
+
+    if "key" not in data or "value" not in data:
+        return {"error": "Required fields: key and value"}
+    
+    key = data["key"]
+    value = data["value"]
+    
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        
+        config[key] = value
+        
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+        
+        load_config()  # Обновляем кэш после записи
+        logger.info(f"Config updated: {key} = {value}")
+        return {"message": f"Updated {key} to {value}", "config": config_cache}
+    except FileNotFoundError:
+        logger.warning("config.json not found, creating new")
+        config = {key: value}
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+        load_config()
+        return {"message": f"Created config with {key} = {value}", "config": config_cache}
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON in config.json")
+        return {"error": "Invalid JSON in config file"}
+    except Exception as e:
+        logger.error(f"Error updating config: {e}")
+        return {"error": str(e)}
+
 
 # Подключаем роутеры
 logger.info("Including routers")

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from cl import logger
-from app.auth import get_api_token_from_header, generate_api_token, require_access_level, get_api_token_from_header, create_audit_record
+from app.auth import get_current_user_or_api_token, generate_api_token, require_access_level, create_audit_record
 from app.database import APIToken, User
 from app.dependencies import get_db
 
@@ -47,7 +47,7 @@ class APITokenListItem(BaseModel):
     uuid: str
     access_level: int
     description: Optional[str] = None
-    key: str
+    key: str  # Raw token для create (один раз), иначе masked
 
 class UserTokenInfo(BaseModel):
     name: str
@@ -75,7 +75,10 @@ def check_token(
     Доступ: любой валидный токен
     """
 
-    token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    token = auth_data["token_obj"]
     create_audit_record(db, request, token)
     return TokenInfoResponse(
         username=token.user.username,
@@ -97,7 +100,10 @@ def register_user(
     Доступ: уровень 1+
     """
 
-    token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    token = auth_data["token_obj"]
     require_access_level(token, 1)
     create_audit_record(db, request, token)
 
@@ -121,14 +127,17 @@ def list_access_levels(request: Request, authorization: Optional[str] = Header(N
     Доступ: уровень 2+
     """
 
-    token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    token = auth_data["token_obj"]
     require_access_level(token, 2)
     create_audit_record(db, request, token)
 
     return [
-        {"access_level": 0, "description": "Только чтение"},
-        {"access_level": 1, "description": "Базовые действия (создание пользователей, whitelist)"},
-        {"access_level": 2, "description": "Полный доступ (удаление токенов, управление системой)"},
+        {"access_level": 0, "description": "Только чтение (с whitelist если enabled)"},
+        {"access_level": 1, "description": "Базовые действия (создание пользователей, whitelist, без whitelist)"},
+        {"access_level": 2, "description": "Полный доступ (удаление токенов, управление системой, без whitelist)"},
     ]
 
 
@@ -142,7 +151,10 @@ def list_users(
 ):
     """Получить список пользователей с пагинацией (уровень 1+)"""
 
-    token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    token = auth_data["token_obj"]
     require_access_level(token, 1)
     create_audit_record(db, request, token)
 
@@ -163,7 +175,10 @@ def get_user_by_uuid(
     - Уровень 2: показываются все токены
     """
 
-    token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    token = auth_data["token_obj"]
     require_access_level(token, 1)
     create_audit_record(db, request, token)
 
@@ -209,8 +224,10 @@ def create_token_for_user(
     Доступ: уровень 1+
     """
 
-    # Получаем токен того, кто делает запрос
-    token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    token = auth_data["token_obj"]
     require_access_level(token, 1)
     create_audit_record(db, request, token)
 
@@ -228,7 +245,7 @@ def create_token_for_user(
     new_token_info = generate_api_token(
         db,
         name=token_data.name,
-        description=token_data.description if token_data.description else None,
+        description=token_data.description,
         user_id=user.id,
         access_level=access_level
     )
@@ -241,7 +258,7 @@ def create_token_for_user(
     return APITokenListItem(
         name=new_token_info["name"],
         uuid=new_token_info["uuid"],
-        key=new_token_info["token"],
+        key=new_token_info["token"],  # Raw token (один раз)
         access_level=new_token_info["access_level"],
         description=new_token_info.get("description")
     )
@@ -261,7 +278,10 @@ def get_token_data(
     - Уровень 2: можно просматривать все токены
     """
 
-    requester_token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    requester_token = auth_data["token_obj"]
     require_access_level(requester_token, 1)
     create_audit_record(db, request, requester_token)
 
@@ -298,10 +318,13 @@ def delete_token(
 ):  
     """
     Удаление API токена по его UUID
-    Доступ: уровень 1+
+    Доступ: уровень 1+ (но level 1 не может удалять >0)
     """
 
-    requester_token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    requester_token = auth_data["token_obj"]
     require_access_level(requester_token, 1)
     create_audit_record(db, request, requester_token)
 
@@ -344,7 +367,10 @@ def update_token(
     Доступ: уровень 2+
     """
 
-    requester_token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    requester_token = auth_data["token_obj"]
     require_access_level(requester_token, 2)
     create_audit_record(db, request, requester_token)
 
@@ -393,7 +419,10 @@ def update_user(
     Доступ: уровень 2+
     """
 
-    requester_token = get_api_token_from_header(authorization, db)
+    auth_data = get_current_user_or_api_token(request, db)
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    requester_token = auth_data["token_obj"]
     require_access_level(requester_token, 2)
     create_audit_record(db, request, requester_token)
 

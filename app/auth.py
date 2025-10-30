@@ -7,17 +7,17 @@
 - Управление токенами пользователями (создание, удаление, просмотр).
 """
 
-from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, Request
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 import secrets
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
-from app.database import APIToken, WhitelistedEntry, SessionLocal
+from app.database import APIToken, WhitelistedEntry, SessionLocal, RequestAudit
 from app.config import settings
 from cryptography.fernet import Fernet
 from cl import logger
+from app.config import get_config_value
 
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
@@ -33,17 +33,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-
-# --- Пользовательские JWT ---
-def create_token(data: dict, expires_minutes: int = None) -> str:
-    logger.debug("Creating JWT token")
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=(expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return token
-
 
 def get_current_user(request: Request):
     token = request.cookies.get("access_token")
@@ -87,67 +76,97 @@ def generate_api_token(db: Session, name: str, user_id: int, access_level: int =
     return {"name": name, "token": encrypted, "uuid": api.uuid, "access_level": access_level, "description": description}
 
 
-def get_api_token_from_header(request: Request, db: Session) -> Optional[APIToken]:
-    header = request.headers.get("X-API-Token")
-    if not header:
-        return None
-    # Ищем по всем токенам, дешифруя ключи
-    all_tokens = db.query(APIToken).all()
-    for db_token in all_tokens:
-        try:
-            if decrypt_token(db_token.key) == header:
-                return db_token
-        except Exception:
-            continue
-    return None
-
-
 def get_current_user_or_api_token(request: Request, db: Session = Depends(get_db)):
     """
-    Универсальная проверка: либо JWT (admin), либо X-API-Token + whitelisted domain/ip.
+    Универсальная проверка: либо JWT (admin), либо Bearer API-токен + условный whitelist.
+    Whitelist проверяется ТОЛЬКО если whitelist_enabled=true И access_level=0.
     Возвращает dict с type: 'admin' или 'api_token' и сопутствующей информацией.
     """
-    # 1) JWT cookie
+    # 1) JWT cookie (admin) — всегда без whitelist
     access_cookie = request.cookies.get("access_token")
     if access_cookie:
         username = get_current_user(request)
+        logger.debug(f"Admin access by {username}")
         return {"type": "admin", "username": username}
 
-    # 2) API token
-    token_obj = get_api_token_from_header(request, db)
-    if not token_obj:
+    # 2) Bearer API token
+    try:
+        token_obj = get_api_token_from_header(request.headers.get("Authorization"), db)
+    except HTTPException:
         logger.warning("API token not provided or invalid")
         raise HTTPException(status_code=401, detail="API token required")
 
-    # Проверка Origin/Ip whitelist
+    # Извлекаем origin/domain/ip заранее — для лога и условной проверки
     origin = request.headers.get("Origin")
     domain = urlparse(origin).netloc if origin else None
     client_ip = request.client.host
 
-    # Ищем совпадение по WhitelistedEntry.value (может быть ip или домен)
-    domain_allowed = False
-    ip_allowed = False
-    if domain:
-        domain_allowed = db.query(WhitelistedEntry).filter(WhitelistedEntry.value == domain).first() is not None
-    ip_allowed = db.query(WhitelistedEntry).filter(WhitelistedEntry.value == client_ip).first() is not None
+    # 3) Условная проверка whitelist: только для level 0 + enabled
+    whitelist_enabled = get_config_value("whitelist", default=True)
+    if token_obj.access_level == 0 and whitelist_enabled:
+        # Ищем совпадение по WhitelistedEntry.value (может быть ip или домен)
+        domain_allowed = db.query(WhitelistedEntry).filter(WhitelistedEntry.value == domain).first() is not None if domain else False
+        ip_allowed = db.query(WhitelistedEntry).filter(WhitelistedEntry.value == client_ip).first() is not None
 
-    if not (domain_allowed or ip_allowed):
-        logger.warning(f"Valid token used from non-whitelisted origin/ip: {domain} / {client_ip}")
-        raise HTTPException(status_code=403, detail="Access from this IP/domain is not allowed")
+        if not (domain_allowed or ip_allowed):
+            logger.warning(f"Level 0 token from non-whitelisted origin/ip: {domain} / {client_ip} (whitelist_enabled={whitelist_enabled})")
+            raise HTTPException(status_code=403, detail=f"Access from this IP/domain is not allowed, your IP/domain address - {client_ip} / {domain or 'N/A'}")
+
+    # Всё ок — логируем аудит
+    audit = RequestAudit(
+        path=request.url.path,
+        method=request.method,
+        client_ip=client_ip,
+        api_token_id=token_obj.id,
+    )
+    db.add(audit)
+    db.commit()
+    logger.info(f"Access granted for token_id={token_obj.id} (level={token_obj.access_level}) from {client_ip} / {domain or 'N/A'} (whitelist: {whitelist_enabled})")
 
     return {"type": "api_token", "token_obj": token_obj}
 
 
-# --- Управление токенами пользователем (для внутренних роутов admin) ---
-def get_user_tokens(db: Session, user_id: int):
-    return db.query(APIToken).filter(APIToken.user_id == user_id).all()
+def require_access_level(token: APIToken, min_level: int):
+    """Проверяет, что токен имеет необходимый уровень доступа."""
+    if token.access_level < min_level:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Недостаточно прав.",
+        )
+    
+
+def get_api_token_from_header(
+    authorization: Optional[str],
+    db: Session
+) -> APIToken:
+    """Возвращает объект APIToken по заголовку Authorization"""
+    token_value = get_token_from_header(authorization)
+    if not token_value:
+        raise HTTPException(status_code=401, detail="Токен не предоставлен")
+
+    token = db.query(APIToken).filter(APIToken.key == token_value).first()
+    if not token:
+        raise HTTPException(status_code=401, detail="Неверный или недействительный токен")
+    return token
 
 
-def delete_token_by_name(db: Session, name: str, user_id: int) -> bool:
-    token = db.query(APIToken).filter(APIToken.name == name, APIToken.user_id == user_id).first()
-    if token:
-        db.delete(token)
-        db.commit()
-        logger.info(f"Deleted API token '{name}' for user {user_id}")
-        return True
-    return False
+def get_token_from_header(authorization: Optional[str]) -> str:
+    """Извлекает токен из заголовка Authorization: Bearer <token>"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Токен не предоставлен")
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Неверный формат заголовка Authorization")
+    return parts[1]
+
+
+def create_audit_record(db: Session, request: Request, api_token: APIToken):
+    """Создаёт запись аудита в базе данных."""
+    audit = RequestAudit(
+        path=request.url.path,
+        method=request.method,
+        client_ip=request.client.host,
+        api_token_id=api_token.id,
+    )
+    db.add(audit)
+    db.commit()
