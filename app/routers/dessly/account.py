@@ -5,13 +5,10 @@
 
 from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
-import requests
-from cl import logger
 from app.auth import get_current_user_or_api_token
-from app.database import User
 from app.dependencies import get_db
+from cl import logger
+import aiohttp
 
 
 router = APIRouter(prefix="/dessly/account", tags=["steam"])
@@ -24,7 +21,7 @@ dessly_base_url = "https://desslyhub.com/api/v1"
 
 
 @router.get("/balance")
-def get_balance_route(
+async def get_balance_route(
     request: Request,
     auth_data=Depends(get_current_user_or_api_token),
     db: Session = Depends(get_db)
@@ -50,8 +47,9 @@ def get_balance_route(
     }
     
     try:
-        response = requests.get(url, headers=headers)
-        response_data = response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                response_data = await response.json()
         
         balance = response_data.get("balance")
         error_code = response_data.get("error_code")

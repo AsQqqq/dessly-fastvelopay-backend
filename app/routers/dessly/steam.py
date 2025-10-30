@@ -4,14 +4,13 @@
 """
 
 from fastapi import APIRouter, Depends, Request, HTTPException
+from app.auth import get_current_user_or_api_token
+from app.dependencies import get_db
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-import requests
 from cl import logger
-from app.auth import get_current_user_or_api_token
-from app.database import User
-from app.dependencies import get_db
+import aiohttp
 
 
 router = APIRouter(prefix="/dessly/steam", tags=["steam"])
@@ -47,7 +46,7 @@ class topup_steam(BaseModel):
 # ==============================
 
 @router.post("/check_login")
-def check_login_route(
+async def check_login_route(
     request: Request,
     payload: check_login,
     auth_data=Depends(get_current_user_or_api_token),
@@ -71,9 +70,9 @@ def check_login_route(
     }
 
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        
-        response_data = response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                response_data = await response.json()
 
         error_code = response_data.get("error_code")
         can_refill = response_data.get("can_refill")
@@ -98,7 +97,7 @@ def check_login_route(
             logger.error(f"Неизвестная ошибка: {error_code}")
             return {"status": False, "error": f"unknown_error_{error_code}"}
             
-    except requests.RequestException as e:
+    except Exception as e:
         logger.error(f"Ошибка при проверке логина Steam: {e}")
         return {"status": False}
 
@@ -108,7 +107,7 @@ def check_login_route(
 # ==============================
 
 @router.post("/topup")
-def topup_steam_route(
+async def topup_steam_route(
     request: Request,
     payload: topup_steam,
     auth_data=Depends(get_current_user_or_api_token),
@@ -134,8 +133,9 @@ def topup_steam_route(
     }
 
     try:
-        response = requests.post(url, json=data, headers=headers)
-        response_data = response.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=data, headers=headers) as response:
+                response_data = await response.json()
         
         error_code = response_data.get("error_code")
         status = response_data.get("status")
@@ -171,6 +171,6 @@ def topup_steam_route(
             logger.error(f"Неизвестная ошибка при пополнении: {error_code}")
             return {"status": False, "error": f"unknown_error_{error_code}"}
 
-    except requests.RequestException as e:
+    except Exception as e:
         logger.error(f"Ошибка при запросе к API Dessly (topup): {e}")
         return {"status": False, "error": "connection_error"}
