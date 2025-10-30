@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi import Depends, Header, Request
 from typing import Optional
 from app.routers import white_domains, auth
+from app.routers.dessly import steam, account
 from fastapi.middleware.cors import CORSMiddleware
 from app.dependencies import get_db
 from sqlalchemy.orm import Session
@@ -124,3 +125,5 @@ def update_config(data: dict, authorization: Optional[str] = Header(None), reque
 logger.info("Including routers")
 app.include_router(white_domains.router)
 app.include_router(auth.router)
+app.include_router(steam.router)
+app.include_router(account.router)

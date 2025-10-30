@@ -60,6 +60,15 @@ class UserDetailResponse(BaseModel):
     uuid: str
     tokens: List[UserTokenInfo] = []
 
+class APITokenUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    access_level: Optional[int] = None  # только для уровня 2
+
+class UserUpdateRequest(BaseModel):
+    username: str
+
+
 # ==============================
 # Пользователи
 # ==============================
@@ -309,7 +318,7 @@ def get_token_data(
 # Удаление токена
 # ==============================
 
-@router.delete("/token/{token_uuid}", status_code=204)
+@router.get("/token/{token_uuid}", status_code=204)
 def delete_token(
     request: Request,
     token_uuid: str,
@@ -324,13 +333,9 @@ def delete_token(
     auth_data = get_current_user_or_api_token(request, db)
     if auth_data["type"] == "admin":
         raise HTTPException(status_code=400, detail="Use API token for this endpoint")
-    requester_token = auth_data["token_obj"]
-    require_access_level(requester_token, 1)
-    create_audit_record(db, request, requester_token)
-
+    
     token_to_delete = db.query(APIToken).filter(APIToken.uuid == token_uuid).first()
-    if not token_to_delete:
-        raise HTTPException(status_code=404, detail="Токен не найден")
+    requester_token = auth_data["token_obj"]
 
     # Проверка прав
     if requester_token.access_level == 1 and token_to_delete.access_level > 0:
@@ -338,6 +343,13 @@ def delete_token(
             status_code=403,
             detail="Недостаточно прав."
         )
+    
+    require_access_level(requester_token, 1)
+
+    logger.info(f"{requester_token.user.username} пытается удалить токен с UUID: {token_uuid}")
+
+    if not token_to_delete:
+        raise HTTPException(status_code=404, detail="Токен не найден")
 
     db.delete(token_to_delete)
     db.commit()
@@ -348,11 +360,6 @@ def delete_token(
 # ==============================
 # Редактирование токена
 # ==============================
-
-class APITokenUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    access_level: Optional[int] = None  # только для уровня 2
 
 @router.put("/token/{token_uuid}/update", response_model=APITokenListItem)
 def update_token(
@@ -368,24 +375,29 @@ def update_token(
     """
 
     auth_data = get_current_user_or_api_token(request, db)
+
     if auth_data["type"] == "admin":
         raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    
     requester_token = auth_data["token_obj"]
     require_access_level(requester_token, 2)
     create_audit_record(db, request, requester_token)
 
     api_token = db.query(APIToken).filter(APIToken.uuid == token_uuid).first()
+    
+    if token_data.access_level is not None:
+        if token_data.access_level not in [1, 2]:
+            raise HTTPException(status_code=400, detail="Неверный уровень доступа")
+        api_token.access_level = token_data.access_level
+
     if not api_token:
         raise HTTPException(status_code=404, detail="Токен не найден")
-
+    
     if token_data.name:
         api_token.name = token_data.name
     if token_data.description:
         api_token.description = token_data.description
-    if token_data.access_level is not None:
-        if token_data.access_level not in [0, 1, 2]:
-            raise HTTPException(status_code=400, detail="Неверный уровень доступа")
-        api_token.access_level = token_data.access_level
+    
 
     db.commit()
     db.refresh(api_token)
@@ -402,9 +414,6 @@ def update_token(
 # ==============================
 # Редактирование username пользователя
 # ==============================
-
-class UserUpdateRequest(BaseModel):
-    username: str
 
 @router.put("/user/{user_uuid}/update", response_model=UserRegisterResponse)
 def update_user(

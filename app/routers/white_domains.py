@@ -108,6 +108,7 @@ def add_white_domain(
     Добавить IP или домен в белый список (для своего user_id).
     Доступ: уровень 1+
     """
+    
     if auth_data["type"] == "api_token":
         token = auth_data["token_obj"]
         require_access_level(token, 1)

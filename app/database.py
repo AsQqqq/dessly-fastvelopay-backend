@@ -76,7 +76,7 @@ class RequestAudit(Base):
     path = Column(String, nullable=False)
     method = Column(String, nullable=False)
     client_ip = Column(String, nullable=False)
-    api_token_id = Column(Integer, ForeignKey("api_tokens.id"), nullable=False)
+    api_token_id = Column(Integer, ForeignKey("api_tokens.id"), nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     api_token = relationship("APIToken", back_populates="audits")
