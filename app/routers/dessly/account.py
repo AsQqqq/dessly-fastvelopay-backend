@@ -11,7 +11,7 @@ from cl import logger
 import aiohttp
 
 
-router = APIRouter(prefix="/dessly/account", tags=["steam"])
+router = APIRouter(prefix="/account", tags=["steam"])
 dessly_base_url = "https://desslyhub.com/api/v1"
 
 

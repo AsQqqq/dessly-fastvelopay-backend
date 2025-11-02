@@ -7,8 +7,8 @@
 from fastapi import FastAPI
 from fastapi import Depends, Header, Request
 from typing import Optional
-from app.routers import white_domains, auth, plugin_update
-from app.routers.dessly import steam, account
+from app.routers import white_domains, auth, plugin_update, news
+from app.routers.dessly import steam, account, currency
 from fastapi.middleware.cors import CORSMiddleware
 from app.dependencies import get_db
 from sqlalchemy.orm import Session
@@ -55,7 +55,7 @@ app.add_middleware(
     name="Ping",
     description="Простой роут для проверки доступности сервиса.",
     tags=["Health"])
-def ping():
+async def ping():
     """Простой роут для проверки доступности сервиса."""
     return {"message": "pong"}
 
@@ -64,7 +64,7 @@ def ping():
     name="Get Config",
     description="Читает и возвращает текущий конфиг из config.json.",
     tags=["Config"])
-def get_config(authorization: Optional[str] = Header(None), request: Request = None, db: Session = Depends(get_db)):
+async def get_config(authorization: Optional[str] = Header(None), request: Request = None, db: Session = Depends(get_db)):
     """
     Читает и возвращает текущий конфиг из config.json.
     Доступ: уровень 2+
@@ -82,7 +82,7 @@ def get_config(authorization: Optional[str] = Header(None), request: Request = N
     name="Update Config",
     description="Обновляет настройку в config.json по ключу и значению. Принимает JSON: {\"key\": \"whitelist_enabled\", \"value\": false}.",
     tags=["Config"])
-def update_config(data: dict, authorization: Optional[str] = Header(None), request: Request = None, db: Session = Depends(get_db)):
+async def update_config(data: dict, authorization: Optional[str] = Header(None), request: Request = None, db: Session = Depends(get_db)):
     """
     Обновляет настройку в config.json по ключу и значению.
     Доступ: уровень 2+
@@ -132,3 +132,5 @@ app.include_router(auth.router)
 app.include_router(steam.router)
 app.include_router(account.router)
 app.include_router(plugin_update.router)
+app.include_router(currency.router)
+app.include_router(news.router)

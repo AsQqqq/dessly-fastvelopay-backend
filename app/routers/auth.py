@@ -74,7 +74,7 @@ class UserUpdateRequest(BaseModel):
 # ==============================
 
 @router.get("/check", response_model=TokenInfoResponse)
-def check_token(
+async def check_token(
     request: Request,
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
@@ -98,7 +98,7 @@ def check_token(
 
 
 @router.post("/register", response_model=UserRegisterResponse, status_code=201)
-def register_user(
+async def register_user(
     request_data: UserRegisterRequest,
     request: Request,
     authorization: Optional[str] = Header(None),
@@ -130,7 +130,7 @@ def register_user(
 
 
 @router.get("/levels", response_model=list)
-def list_access_levels(request: Request, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+async def list_access_levels(request: Request, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
     """
     Описание уровней доступа
     Доступ: уровень 2+
@@ -151,7 +151,7 @@ def list_access_levels(request: Request, authorization: Optional[str] = Header(N
 
 
 @router.get("/users", response_model=List[UserListItem])
-def list_users(
+async def list_users(
     request: Request,
     offset: int = Query(0, ge=0),
     limit: int = Query(1000, le=1000),
@@ -172,7 +172,7 @@ def list_users(
 
 
 @router.get("/user/{user_uuid}", response_model=UserDetailResponse)
-def get_user_by_uuid(
+async def get_user_by_uuid(
     request: Request,
     user_uuid: str,
     authorization: Optional[str] = Header(None),
@@ -221,7 +221,7 @@ def get_user_by_uuid(
 # ==============================
 
 @router.post("/user/{user_uuid}/token/create", response_model=APITokenListItem, status_code=201)
-def create_token_for_user(
+async def create_token_for_user(
     request: Request,
     user_uuid: str,
     token_data: APITokenCreateRequest,
@@ -275,7 +275,7 @@ def create_token_for_user(
 
 
 @router.get("/user/{token_uuid}/token/data", response_model=APITokenListItem, status_code=200)
-def get_token_data(
+async def get_token_data(
     request: Request,
     token_uuid: str,
     authorization: Optional[str] = Header(None),
@@ -319,7 +319,7 @@ def get_token_data(
 # ==============================
 
 @router.get("/token/{token_uuid}", status_code=204)
-def delete_token(
+async def delete_token(
     request: Request,
     token_uuid: str,
     authorization: Optional[str] = Header(None),
@@ -362,7 +362,7 @@ def delete_token(
 # ==============================
 
 @router.put("/token/{token_uuid}/update", response_model=APITokenListItem)
-def update_token(
+async def update_token(
     request: Request,
     token_uuid: str,
     token_data: APITokenUpdateRequest,
@@ -416,7 +416,7 @@ def update_token(
 # ==============================
 
 @router.put("/user/{user_uuid}/update", response_model=UserRegisterResponse)
-def update_user(
+async def update_user(
     request: Request,
     user_uuid: str,
     user_data: UserUpdateRequest,

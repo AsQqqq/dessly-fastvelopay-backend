@@ -65,7 +65,7 @@ def validate_value(value: str) -> bool:
 # ==============================
 
 @router.get("/list", response_model=List[WhiteDomainItem])
-def list_white_domains(
+async def list_white_domains(
     request: Request,
     auth_data=Depends(get_current_user_or_api_token),
     db: Session = Depends(get_db)
@@ -97,7 +97,7 @@ def list_white_domains(
 
 
 @router.post("/add/{userid}", response_model=WhiteDomainItem, status_code=201)
-def add_white_domain(
+async def add_white_domain(
     item: WhiteDomainCreate,
     request: Request,
     userid: str,
@@ -144,7 +144,7 @@ def add_white_domain(
 
 
 @router.get("/delete/{entry_uuid}", status_code=204)
-def delete_white_domain(
+async def delete_white_domain(
     entry_uuid: str,
     request: Request,
     auth_data=Depends(get_current_user_or_api_token),

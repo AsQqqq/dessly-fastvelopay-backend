@@ -14,7 +14,7 @@ from cl import logger
 import aiohttp
 
 
-router = APIRouter(prefix="/dessly/currency", tags=["currency"])
+router = APIRouter(prefix="/currency", tags=["currency"])
 dessly_base_url = "https://desslyhub.com/api/v1/exchange_rates/steam"
 
 
@@ -48,6 +48,9 @@ async def currency_conversion(
 
     if auth_data["type"] == "admin":
         raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    
+    if not payload.dessly_token:
+        raise HTTPException(status_code=400, detail="Error dessly token")
 
     headers = {
         "content-type": "application/json",

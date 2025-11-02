@@ -4,7 +4,8 @@
 """
 
 from sqlalchemy import (
-    create_engine, Column, Integer, String, ForeignKey, DateTime, Text
+    create_engine, Column, Integer, String, text,
+    ForeignKey, DateTime, Text, Boolean, UniqueConstraint
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
@@ -120,6 +121,49 @@ class UpdatePlugin(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+# ==============================
+# Таблица для новостей
+# ==============================
+
+# Сами новости
+class UserNews(Base):
+    __tablename__ = "news"
+
+    id = Column(Integer, primary_key=True, index=True)
+    uuid = Column(String(36), unique=True, index=True, default=lambda: str(uuid.uuid4()))
+    
+    title = Column(String(255), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    
+    # Для плагина — удобно проверять, было ли уже прочитано
+    last_checked = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    def __repr__(self):
+        return f"<News(id={self.id}, title={self.title!r}, timestamp={self.timestamp})>"
+    
+
+# Чтение новостей
+class UserNewsRead(Base):
+    __tablename__ = "user_news_read"
+    __table_args__ = (
+        UniqueConstraint('user_id', 'news_id', name='uix_user_news'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    news_id = Column(Integer, ForeignKey("news.id"), nullable=False, index=True)
+    read_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", backref="read_news")
+    news = relationship("UserNews", backref="read_by_users")
+
+    def __repr__(self):
+        return f"<UserNewsRead(user_id={self.user_id}, news_id={self.news_id}, read_at={self.read_at})>"
+
+
 
 # ==============================
 # Инициализация базы данных
@@ -128,3 +172,7 @@ class UpdatePlugin(Base):
 logger.info("Creating all tables in the database (if not exist)")
 Base.metadata.create_all(bind=engine)
 logger.info("Database tables created or already exist")
+
+# Включаем поддержку внешних ключей
+with engine.connect() as conn:
+    conn.execute(text("PRAGMA foreign_keys=ON"))
