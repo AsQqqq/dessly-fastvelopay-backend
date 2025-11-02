@@ -196,10 +196,6 @@ def rollback_update(
         UpdatePlugin.new_version == current_version
     ).all()
 
-    for update in updates_to_remove:
-        db.delete(update)
-    db.commit()
-
     # Откатываем актуальную версию в config.json
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -216,6 +212,10 @@ def rollback_update(
     except Exception as e:
         logger.error(f"Ошибка при откате config.json: {e}")
         raise HTTPException(status_code=500, detail=f"Ошибка отката: {e}")
+
+    for update in updates_to_remove:
+        db.delete(update)
+    db.commit()
 
     return {
         "message": "Откат успешно выполнен",
