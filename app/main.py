@@ -7,12 +7,16 @@
 from fastapi import FastAPI
 from fastapi import Depends, Header, Request
 from typing import Optional
-from app.routers import white_domains, auth
+from app.routers import white_domains, auth, plugin_update
 from app.routers.dessly import steam, account
 from fastapi.middleware.cors import CORSMiddleware
 from app.dependencies import get_db
 from sqlalchemy.orm import Session
-from app.auth import require_access_level, get_api_token_from_header, create_audit_record
+from app.auth import (
+    require_access_level, 
+    get_api_token_from_header, 
+    create_audit_record
+)
 from cl import logger
 import time, json
 from app.config import CONFIG_PATH, load_config, config_cache
@@ -127,3 +131,4 @@ app.include_router(white_domains.router)
 app.include_router(auth.router)
 app.include_router(steam.router)
 app.include_router(account.router)
+app.include_router(plugin_update.router)

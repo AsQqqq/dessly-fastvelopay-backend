@@ -104,6 +104,22 @@ class WhitelistedEntry(Base):
         return f"<WhitelistedEntry(uuid={self.uuid}, value={self.value}, user_id={self.user_id})>"
 
 
+# ==============================
+# Таблица обновлений плагина
+# ==============================
+
+class UpdatePlugin(Base):
+    __tablename__ = "update_plugin_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    uuid = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    last_version = Column(Text, nullable=False)
+    new_version = Column(Text, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 
 # ==============================
 # Инициализация базы данных
