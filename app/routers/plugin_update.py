@@ -63,7 +63,6 @@ async def get_version(
         )
 
     token = auth_data["token_obj"]
-    require_access_level(token, 1)
 
     # Получаем версии из конфигурации
     config_version = get_config_value(key="version_update", default="None")
@@ -220,33 +219,4 @@ async def rollback_update(
         "message": "Откат успешно выполнен",
         "rolled_back_to": active_version,
         "removed_update_version": current_version
-    }
-
-
-@router.get("/vp")
-async def get_version_plugin(
-    request: Request,
-    auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
-):
-    """
-    Получение информации о версиях плагина:
-    - Текущая версия
-    - Активная версия
-    - История всех версий
-    """
-
-    if auth_data["type"] != "api_token":
-        raise HTTPException(
-            status_code=403,
-            detail="Недостаточно прав."
-        )
-
-    # Получаем версии из конфигурации
-    config_version = get_config_value(key="version_update", default="None")
-    config_active_version = get_config_value(key="version_update_active", default="None")
-
-    return {
-        "current_version": config_version,
-        "active_version": config_active_version,
     }
