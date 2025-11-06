@@ -62,8 +62,6 @@ async def get_version(
             detail="Недостаточно прав."
         )
 
-    token = auth_data["token_obj"]
-
     # Получаем версии из конфигурации
     config_version = get_config_value(key="version_update", default="None")
     config_active_version = get_config_value(key="version_update_active", default="None")
