@@ -36,6 +36,9 @@ class Settings:
             base64.urlsafe_b64decode(FERNET_KEY)
         except Exception:
             logger.error("FERNET_KEY is set but invalid base64. Generate with Fernet.generate_key().")
+    GITHUB_API = os.getenv("GITHUB_API")
+    OWNER = os.getenv("OWNER")
+    REPO = os.getenv("REPO")
 
 settings = Settings()
 

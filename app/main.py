@@ -7,7 +7,7 @@
 from fastapi import FastAPI
 from fastapi import Depends, Header, Request
 from typing import Optional
-from app.routers import white_domains, auth, plugin_update, news
+from app.routers import white_domains, auth, plugin_update, news, download
 from app.routers.dessly import steam, account, currency
 from fastapi.middleware.cors import CORSMiddleware
 from app.dependencies import get_db
@@ -134,3 +134,4 @@ app.include_router(account.router)
 app.include_router(plugin_update.router)
 app.include_router(currency.router)
 app.include_router(news.router)
+app.include_router(download.router)
