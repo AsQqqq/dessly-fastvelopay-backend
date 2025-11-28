@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Управление обновлениями</title>
+
+  <style>
+    :root {
+      --bg: #f6f6f6;
+      --card: #ffffff;
+      --text: #111;
+      --muted: #00000080;
+      --accent: #ff4e00;
+      --accent-hover: #cc3c00;
+      --accent-weak: #ff4e001a;
+      --good: #2ecc71;
+      --bad: #ff8080;
+      --warn: #f1c40f;
+      --border: #00000012;
+    }
+    .dark {
+      --bg: #0d0d0d;
+      --card: #1a1a1a;
+      --text: #e7e7e7;
+      --muted: #ffffff80;
+      --accent: #ff6a00;
+      --accent-hover: #e05d00;
+      --accent-weak: #ff6a001a;
+      --good: #37d67a;
+      --bad: #ff9a9a;
+      --warn: #f7d774;
+      --border: #ffffff14;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    header {
+      display:flex;
+      justify-content: space-between;
+      align-items:center;
+      padding: 18px 26px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      backdrop-filter: blur(10px);
+      background: color-mix(in oklab, var(--bg), transparent 35%);
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    header .title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: .2px;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: .15s ease;
+    }
+    .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-ghost {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .btn-ghost:hover { background: color-mix(in oklab, var(--card), white 4%); }
+    .btn-small { padding: 6px 9px; font-size: 12px; border-radius: 8px; }
+    .btn-warn { background: #f39c12; }
+    .btn-warn:hover { background: #d18910; }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 16px;
+      min-height: calc(100vh - 82px);
+    }
+
+    .panel {
+      background: var(--card);
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      padding: 14px;
+      display:flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .search-row {
+      display:flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .search-input {
+      flex:1;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      outline: none;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      transition: .15s;
+    }
+    .search-input:focus { box-shadow: 0 0 0 3px var(--accent-weak); border-color: var(--accent); }
+
+    .chips { display:flex; gap:6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .chip {
+      padding: 6px 9px;
+      font-size: 12px;
+      border-radius: 999px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      opacity: .9;
+      user-select: none;
+    }
+    .chip.active {
+      background: var(--accent-weak);
+      border-color: var(--accent);
+      opacity: 1;
+      font-weight: 700;
+    }
+
+    .list {
+      overflow:auto;
+      padding-right: 2px;
+      display:flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .update-item {
+      padding: 12px;
+      border-radius: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: .12s ease;
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      align-items: center;
+    }
+    .update-item:hover {
+      transform: translateY(-1px);
+      border-color: color-mix(in oklab, var(--accent), var(--border) 70%);
+    }
+    .update-item.selected {
+      background: color-mix(in oklab, var(--accent-weak), var(--bg) 80%);
+      border-color: var(--accent);
+    }
+
+    .update-title {
+      font-weight: 800;
+      font-size: 14px;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .update-meta {
+      grid-column: 1 / -1;
+      font-size: 12px;
+      color: var(--muted);
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      padding: 2px 7px;
+      font-size: 11px;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+    .badge.good { color: var(--good); border-color: color-mix(in oklab, var(--good), var(--border) 70%); }
+    .badge.bad  { color: var(--bad);  border-color: color-mix(in oklab, var(--bad),  var(--border) 70%); }
+    .badge.warn { color: var(--warn); border-color: color-mix(in oklab, var(--warn), var(--border) 70%); }
+
+    .section { margin-bottom: 12px; }
+    .section h2 { margin: 0 0 8px; font-size: 18px; font-weight: 800; }
+
+    .kv {
+      display:grid;
+      grid-template-columns: 160px 1fr;
+      gap: 8px 12px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .kv .k { color: var(--muted); font-weight: 700; }
+
+    .desc {
+      background: var(--bg);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      max-height: 260px;
+      overflow:auto;
+    }
+
+    .row-actions {
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    .muted { color: var(--muted); font-size: 13px; }
+    .err { color: var(--bad); font-size: 14px; white-space: pre-wrap; }
+
+    .empty {
+      text-align:center;
+      padding: 30px 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* ===== modal ===== */
+    .modal {
+      position: fixed;
+      inset: 0;
+      padding: 20px;
+      background: #00000070;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    .modal.hidden { display:none; }
+    .modal-content {
+      background: var(--card);
+      padding: 18px;
+      border-radius: 16px;
+      width: 420px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+      max-width: 100%;
+    }
+    .modal-content h3 { margin: 0 0 10px; font-size: 18px; }
+    .field { display:flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .field label { font-size: 12px; color: var(--muted); font-weight: 800; text-transform: uppercase; letter-spacing: .3px; }
+    .input, .textarea {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      font-size: 15px;
+      transition: .15s;
+    }
+    .textarea { min-height: 120px; resize: vertical; white-space: pre-wrap; line-height: 1.5; }
+    .input:focus, .textarea:focus { box-shadow: 0 0 0 3px var(--accent-weak); border-color: var(--accent); }
+
+    .modal-buttons { display:flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+    /* ===== mobile ===== */
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      header { padding: 12px 14px; }
+      header .title { width: 100%; text-align:center; }
+      .kv { grid-template-columns: 120px 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== Modal: Create Update ===== -->
+<div id="modalCreateUpdate" class="modal hidden">
+  <div class="modal-content">
+    <h3>Выпустить обновление</h3>
+
+    <div class="field">
+      <label>Версия (x.x.x.x)</label>
+      <input id="newVersion" class="input" placeholder="0.0.0.4" />
+      <div class="muted">Версия должна быть выше текущей на сервере.</div>
+    </div>
+
+    <div class="field">
+      <label>Название</label>
+      <input id="newName" class="input" placeholder="Update 0.0.0.4 (необязательно)" />
+    </div>
+
+    <div class="field">
+      <label>Описание</label>
+      <textarea id="newDescription" class="textarea" placeholder="Что изменилось…" ></textarea>
+    </div>
+
+    <div id="createErr" class="err" style="display:none; margin-bottom:8px;"></div>
+
+    <div class="modal-buttons">
+      <button class="btn" id="btnCreateDo">Выпустить</button>
+      <button class="btn btn-ghost" onclick="closeModal('modalCreateUpdate')">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Modal: Rollback to Active ===== -->
+<div id="modalRollback" class="modal hidden">
+  <div class="modal-content">
+    <h3>Откатиться к активной</h3>
+    <div class="muted" style="margin-bottom:10px;">
+      Это удалит текущую актуальную версию и вернёт состояние к активной.
+    </div>
+
+    <div id="rollbackErr" class="err" style="display:none; margin-bottom:8px;"></div>
+
+    <div class="modal-buttons">
+      <button class="btn btn-warn" id="btnRollbackDo">Откатить</button>
+      <button class="btn btn-ghost" onclick="closeModal('modalRollback')">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Modal: Set Active Version (from history only) ===== -->
+<div id="modalSetActive" class="modal hidden">
+  <div class="modal-content">
+    <h3>Сделать активной</h3>
+    <div class="muted" style="margin-bottom:8px;">Выберите версию из истории. Активная не может быть выше актуальной.</div>
+
+    <div class="field">
+      <label>Версия</label>
+      <select id="activeSelect" class="input"></select>
+    </div>
+
+    <div id="activeErr" class="err" style="display:none; margin-bottom:8px;"></div>
+
+    <div class="modal-buttons">
+      <button class="btn" id="btnActiveDo">Сделать активной</button>
+      <button class="btn btn-ghost" onclick="closeModal('modalSetActive')">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="title">FastVeloPay & DesslyHub — Обновления</div>
+  <div style="display:flex; gap:8px;">
+    <button class="btn" id="btnNew">+ Выпустить обновление</button>
+    <button class="btn btn-ghost" id="btnDownload">Скачать файлы (GitHub)</button>
+    <button class="btn btn-ghost" id="btnTheme">Тема</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="layout">
+
+    <!-- LEFT: history list -->
+    <aside class="panel">
+      <div class="search-row">
+        <input id="searchInput" class="search-input" placeholder="Поиск по версии / названию..." />
+        <button class="btn btn-small" id="btnReload">Обновить</button>
+      </div>
+
+      <div class="chips">
+        <div class="chip active" data-filter="all">Все</div>
+        <div class="chip" data-filter="current">Актуальная</div>
+        <div class="chip" data-filter="active">Активная</div>
+        <div class="chip" data-filter="older">Старые</div>
+      </div>
+
+      <div id="historyList" class="list"></div>
+    </aside>
+
+    <!-- RIGHT: details -->
+    <main class="panel">
+      <div class="section">
+        <h2>Состояние версий</h2>
+        <div class="kv">
+          <div class="k">Актуальная:</div> <div id="currentVer">—</div>
+          <div class="k">Активная:</div>  <div id="activeVer">—</div>
+        </div>
+        <div id="stateBadges" style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+        <div class="row-actions" style="margin-top:10px;">
+          <button class="btn btn-small" id="btnOpenSetActive" disabled>Сменить активную</button>
+          <button class="btn btn-small btn-warn" id="btnRollback" disabled>Откатиться к активной</button>
+        </div>
+      </div>
+
+      <div class="section" style="margin-top:10px;">
+        <h2 id="detailsTitle">Выберите обновление</h2>
+        <div id="detailsBadges" style="margin:6px 0 8px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+
+        <div class="kv" id="detailsKV" style="display:none;">
+          <div class="k">ID:</div> <div id="dId">—</div>
+          <div class="k">UUID:</div> <div id="dUuid">—</div>
+          <div class="k">Название:</div> <div id="dName">—</div>
+          <div class="k">Было:</div> <div id="dLast">—</div>
+          <div class="k">Стало:</div> <div id="dNew">—</div>
+          <div class="k">Дата:</div> <div id="dTime">—</div>
+        </div>
+
+        <div class="field" id="descWrap" style="display:none; margin-top:10px;">
+          <label>Описание</label>
+          <div id="dDesc" class="desc"></div>
+        </div>
+
+        <div class="row-actions" id="detailsActions" style="display:none;">
+          <button class="btn btn-small" id="btnMakeActive" disabled>Сделать активной</button>
+        </div>
+
+        <div id="detailsEmpty" class="empty">Нажми на запись слева, чтобы посмотреть детали.</div>
+      </div>
+
+      <div id="globalMsg" class="muted" style="margin-top:auto;"></div>
+      <div id="globalErr" class="err" style="display:none;"></div>
+    </main>
+
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* helpers */
+function getCookie(name) {
+  const m = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[2]) : null;
+}
+function toggleTheme() { document.documentElement.classList.toggle("dark"); }
+
+async function apiFetch(url, options = {}) {
+  const token = getCookie("admin_token");
+  const headers = {
+    ...(options.headers || {}),
+    "Authorization": "Bearer " + (token || "")
+  };
+
+  const resp = await fetch(url, {
+    credentials: "include",
+    ...options,
+    headers
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => "");
+    throw new Error(`${resp.status} ${resp.statusText}\n${txt}`);
+  }
+
+  const ct = resp.headers.get("content-type") || "";
+  if (ct.includes("application/json")) return resp.json();
+  return resp.text();
+}
+
+/* state */
+let currentVersion = null;
+let activeVersion = null;
+let history = [];
+let selectedId = null;
+let currentFilter = "all";
+
+/* dom */
+const historyListEl = document.getElementById("historyList");
+const searchInputEl = document.getElementById("searchInput");
+
+const currentVerEl = document.getElementById("currentVer");
+const activeVerEl = document.getElementById("activeVer");
+const stateBadgesEl = document.getElementById("stateBadges");
+
+const btnTheme = document.getElementById("btnTheme");
+const btnReload = document.getElementById("btnReload");
+const btnNew = document.getElementById("btnNew");
+const btnDownload = document.getElementById("btnDownload");
+const btnRollback = document.getElementById("btnRollback");
+const btnOpenSetActive = document.getElementById("btnOpenSetActive");
+
+const detailsTitleEl = document.getElementById("detailsTitle");
+const detailsBadgesEl = document.getElementById("detailsBadges");
+const detailsKVEl = document.getElementById("detailsKV");
+const descWrapEl = document.getElementById("descWrap");
+const detailsActionsEl = document.getElementById("detailsActions");
+const detailsEmptyEl = document.getElementById("detailsEmpty");
+
+const dIdEl = document.getElementById("dId");
+const dUuidEl = document.getElementById("dUuid");
+const dNameEl = document.getElementById("dName");
+const dLastEl = document.getElementById("dLast");
+const dNewEl = document.getElementById("dNew");
+const dTimeEl = document.getElementById("dTime");
+const dDescEl = document.getElementById("dDesc");
+
+const btnMakeActive = document.getElementById("btnMakeActive");
+
+const globalMsgEl = document.getElementById("globalMsg");
+const globalErrEl = document.getElementById("globalErr");
+
+const newVersionEl = document.getElementById("newVersion");
+const newNameEl = document.getElementById("newName");
+const newDescriptionEl = document.getElementById("newDescription");
+const createErrEl = document.getElementById("createErr");
+const btnCreateDo = document.getElementById("btnCreateDo");
+
+const activeSelectEl = document.getElementById("activeSelect");
+const activeErrEl = document.getElementById("activeErr");
+const btnActiveDo = document.getElementById("btnActiveDo");
+
+/* events */
+btnTheme.onclick = toggleTheme;
+btnReload.onclick = loadVersions;
+btnNew.onclick = () => openModal("modalCreateUpdate");
+btnDownload.onclick = downloadFiles;
+btnRollback.onclick = () => openModal("modalRollback");
+btnOpenSetActive.onclick = () => openModal("modalSetActive");
+btnMakeActive.onclick = () => openModal("modalSetActive");
+
+btnCreateDo.onclick = createUpdate;
+btnActiveDo.onclick = setActiveVersion;
+
+searchInputEl.oninput = renderHistory;
+
+document.getElementById("btnRollbackDo").onclick = async () => {
+  const rollbackErr = document.getElementById("rollbackErr");
+  rollbackErr.style.display = "none";
+  rollbackErr.textContent = "";
+
+  try {
+    console.log("TEST")
+    const selectedUpdate = history.find(x => x.id === selectedId);
+    await rollbackToActive(selectedUpdate.new_version);
+    closeModal("modalRollback");
+  } catch (e) {
+    rollbackErr.style.display = "block";
+    rollbackErr.textContent = e.message;
+  }
+};
+
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.onclick = () => {
+    document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    currentFilter = chip.dataset.filter;
+    renderHistory();
+  };
+});
+
+/* modal helpers */
+function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
+function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+
+/* version utils */
+function parseVer(v) { return String(v || "0.0.0.0").split(".").map(x => parseInt(x, 10) || 0); }
+function cmpVer(a, b) {
+  const A = parseVer(a), B = parseVer(b);
+  for (let i = 0; i < Math.max(A.length, B.length); i++) {
+    const da = A[i] || 0, db = B[i] || 0;
+    if (da > db) return 1;
+    if (da < db) return -1;
+  }
+  return 0;
+}
+function isHigher(a, b) { return cmpVer(a, b) > 0; }
+function isEqual(a, b) { return cmpVer(a, b) === 0; }
+const VERSION_REGEX = /^\d+\.\d+\.\d+\.\d+$/;
+
+/* normalize history */
+function normalizeHistory(data) {
+  if (Array.isArray(data)) return data;
+  if (data?.history) return data.history;
+  if (data?.items) return data.items;
+  if (data?.data) return data.data;
+  return [];
+}
+
+function fmtDate(v) {
+  try {
+    const d = new Date(v);
+    if (isNaN(d)) return String(v);
+    return d.toLocaleString("ru-RU");
+  } catch { return String(v); }
+}
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+/* render state */
+function renderState() {
+  currentVerEl.textContent = currentVersion || "—";
+  activeVerEl.textContent = activeVersion || "—";
+
+  stateBadgesEl.innerHTML = "";
+  if (currentVersion) stateBadgesEl.appendChild(makeBadge("Актуальная", "good"));
+  if (activeVersion) stateBadgesEl.appendChild(makeBadge("Активная", "warn"));
+
+  const hasHistory = history.length > 0;
+  btnOpenSetActive.disabled = !hasHistory;
+  btnRollback.disabled = !hasHistory;
+}
+
+function makeBadge(text, cls="") {
+  const b = document.createElement("div");
+  b.className = `badge ${cls}`.trim();
+  b.textContent = text;
+  return b;
+}
+
+/* render history list */
+function renderHistory() {
+  const q = (searchInputEl.value || "").toLowerCase().trim();
+  let items = history.slice();
+
+  if (currentFilter === "current") items = items.filter(u => isEqual(u.new_version, currentVersion));
+  if (currentFilter === "active") items = items.filter(u => isEqual(u.new_version, activeVersion));
+  if (currentFilter === "older") items = items.filter(u => cmpVer(u.new_version, activeVersion) < 0);
+
+  if (q) {
+    items = items.filter(u =>
+      (u.name || "").toLowerCase().includes(q) ||
+      (u.new_version || "").toLowerCase().includes(q) ||
+      (u.last_version || "").toLowerCase().includes(q)
+    );
+  }
+
+  items.sort((a, b) => {
+    const ta = new Date(a.timestamp || 0).getTime();
+    const tb = new Date(b.timestamp || 0).getTime();
+    if (ta && tb) return tb - ta;
+    return cmpVer(b.new_version, a.new_version);
+  });
+
+  historyListEl.innerHTML = "";
+  if (!items.length) {
+    historyListEl.innerHTML = `<div class="empty">История пуста 😶</div>`;
+    return;
+  }
+
+  for (const u of items) {
+    const id = u.id;
+    const isCur = currentVersion && isEqual(u.new_version, currentVersion);
+    const isAct = activeVersion && isEqual(u.new_version, activeVersion);
+    const isBelowActive = activeVersion && cmpVer(u.new_version, activeVersion) < 0;
+
+    const div = document.createElement("div");
+    div.className = "update-item" + (id === selectedId ? " selected" : "");
+    div.onclick = () => selectUpdate(id);
+
+    const badges = [];
+    if (isCur) badges.push(`<span class="badge good">current</span>`);
+    if (isAct) badges.push(`<span class="badge warn">active</span>`);
+    if (!isCur && !isAct && isBelowActive) badges.push(`<span class="badge bad">below active</span>`);
+
+    div.innerHTML = `
+      <div class="update-title" title="${escapeHtml(u.name || u.new_version)}">${escapeHtml(u.name || "Update " + u.new_version)}</div>
+      <div class="badge">${escapeHtml(u.new_version || "-")}</div>
+      <div class="update-meta">
+        <span class="badge">id: ${escapeHtml(String(id ?? "-"))}</span>
+        <span class="badge">${escapeHtml(u.last_version || "-")} → ${escapeHtml(u.new_version || "-")}</span>
+        ${u.timestamp ? `<span class="badge">${escapeHtml(fmtDate(u.timestamp))}</span>` : ""}
+        ${badges.join(" ")}
+      </div>
+    `;
+
+    historyListEl.appendChild(div);
+  }
+}
+
+/* details */
+function clearDetails() {
+  detailsTitleEl.textContent = "Выберите обновление";
+  detailsBadgesEl.innerHTML = "";
+  detailsKVEl.style.display = "none";
+  descWrapEl.style.display = "none";
+  detailsActionsEl.style.display = "none";
+  detailsEmptyEl.style.display = "block";
+  btnMakeActive.disabled = true;
+}
+
+function selectUpdate(id) {
+  selectedId = id;
+  renderHistory();
+
+  const u = history.find(x => x.id === id);
+  if (!u) { clearDetails(); return; }
+
+  detailsEmptyEl.style.display = "none";
+  detailsKVEl.style.display = "grid";
+  descWrapEl.style.display = "block";
+  detailsActionsEl.style.display = "flex";
+
+  detailsTitleEl.textContent = u.new_version || u.name || "Update";
+
+  dIdEl.textContent = u.id ?? "—";
+  dUuidEl.textContent = u.uuid ?? "—";
+  dNameEl.textContent = u.name ?? `Update ${u.new_version || ""}`;
+  dLastEl.textContent = u.last_version ?? "—";
+  dNewEl.textContent = u.new_version ?? "—";
+  dTimeEl.textContent = u.timestamp ? fmtDate(u.timestamp) : "—";
+  dDescEl.textContent = u.description ?? "";
+
+  detailsBadgesEl.innerHTML = "";
+  const isCur = currentVersion && isEqual(u.new_version, currentVersion);
+  const isAct = activeVersion && isEqual(u.new_version, activeVersion);
+  const belowAct = activeVersion && cmpVer(u.new_version, activeVersion) < 0;
+
+  if (isCur) detailsBadgesEl.appendChild(makeBadge("Актуальная", "good"));
+  if (isAct) detailsBadgesEl.appendChild(makeBadge("Активная", "warn"));
+  if (!isCur && !isAct && belowAct) detailsBadgesEl.appendChild(makeBadge("Ниже активной", "bad"));
+  if (!isCur && !isAct && !belowAct) detailsBadgesEl.appendChild(makeBadge("Старая", ""));
+
+  btnMakeActive.disabled = !(currentVersion && cmpVer(u.new_version, currentVersion) <= 0 && !belowAct);
+}
+
+/* fill active select */
+function fillActiveSelect() {
+  activeSelectEl.innerHTML = "";
+  const uniq = [...new Set(history.map(h => h.new_version).filter(Boolean))];
+  uniq.sort((a, b) => cmpVer(b, a));
+
+  for (const v of uniq) {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v;
+    if (activeVersion && isEqual(v, activeVersion)) opt.selected = true;
+    activeSelectEl.appendChild(opt);
+  }
+}
+
+/* API actions */
+async function loadVersions() {
+  globalErrEl.style.display = "none";
+  globalErrEl.textContent = "";
+  globalMsgEl.textContent = "Загрузка версий…";
+  historyListEl.innerHTML = `<div class="empty">Загрузка…</div>`;
+
+  try {
+    const data = await apiFetch("/update/version");
+    currentVersion = data.current_version || null;
+    activeVersion = data.active_version || null;
+    history = normalizeHistory(data);
+
+    renderState();
+    renderHistory();
+    fillActiveSelect();
+
+    if (selectedId == null && history.length) {
+      selectUpdate(history[0].id);
+    } else if (selectedId != null) {
+      selectUpdate(selectedId);
+    } else {
+      clearDetails();
+    }
+
+    globalMsgEl.textContent = "";
+  } catch (e) {
+    globalMsgEl.textContent = "";
+    globalErrEl.style.display = "block";
+    globalErrEl.textContent = e.message;
+    historyListEl.innerHTML = `<div class="err">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function createUpdate() {
+  createErrEl.style.display = "none";
+  createErrEl.textContent = "";
+
+  const version = newVersionEl.value.trim();
+  let name = newNameEl.value.trim();
+  const description = newDescriptionEl.value.trim();
+
+  if (!VERSION_REGEX.test(version)) {
+    return showCreateErr("Неверный формат версии, ожидается 0.0.0.0");
+  }
+  if (!description) {
+    return showCreateErr("Описание обновления обязательно");
+  }
+  if (!name) name = `Update ${version}`;
+
+  try {
+    btnCreateDo.disabled = true;
+    btnCreateDo.textContent = "Выпускаю…";
+
+    await apiFetch("/update/update", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name, version, description })
+    });
+
+    closeModal("modalCreateUpdate");
+    newVersionEl.value = "";
+    newNameEl.value = "";
+    newDescriptionEl.value = "";
+
+    await loadVersions();
+    const just = history.find(h => isEqual(h.new_version, version));
+    if (just) selectUpdate(just.id);
+
+  } catch (e) {
+    showCreateErr(e.message);
+  } finally {
+    btnCreateDo.disabled = false;
+    btnCreateDo.textContent = "Выпустить";
+  }
+}
+function showCreateErr(msg) {
+  createErrEl.style.display = "block";
+  createErrEl.textContent = msg;
+}
+
+async function downloadFiles() {
+  globalErrEl.style.display = "none";
+  globalErrEl.textContent = "";
+  globalMsgEl.textContent = "Запускаю скачивание файлов релиза…";
+
+  try {
+    const data = await apiFetch("/update/download");
+    globalMsgEl.textContent = `Скачивание запущено для версии ${data.version || currentVersion}`;
+    setTimeout(() => globalMsgEl.textContent = "", 5000);
+  } catch (e) {
+    globalMsgEl.textContent = "";
+    globalErrEl.style.display = "block";
+    globalErrEl.textContent = e.message;
+  }
+}
+
+async function setActiveVersion() {
+  activeErrEl.style.display = "none";
+  activeErrEl.textContent = "";
+
+  const v = activeSelectEl.value;
+  if (!v) return showActiveErr("Нет версии для выбора");
+
+  if (currentVersion && isHigher(v, currentVersion)) {
+    return showActiveErr(`Нельзя сделать активной версию выше актуальной (${currentVersion})`);
+  }
+
+  try {
+    btnActiveDo.disabled = true;
+    btnActiveDo.textContent = "Сохраняю…";
+
+    await apiFetch("/config", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ key: "version_update_active", value: v })
+    });
+
+    closeModal("modalSetActive");
+    await loadVersions();
+  } catch (e) {
+    showActiveErr(e.message);
+  } finally {
+    btnActiveDo.disabled = false;
+    btnActiveDo.textContent = "Сделать активной";
+  }
+}
+function showActiveErr(msg) {
+  activeErrEl.style.display = "block";
+  activeErrEl.textContent = msg;
+}
+
+async function rollbackToActive(version) {
+
+    globalErrEl.style.display = "none";
+    globalErrEl.textContent = "";
+    globalMsgEl.textContent = "Выполняю откат…";
+        
+    try {
+        await apiFetch("/update/rollback", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ version })
+        });
+        await loadVersions();
+        globalMsgEl.textContent = "Откат выполнен";
+        setTimeout(() => globalMsgEl.textContent = "", 5000);
+    } catch (e) {
+        globalMsgEl.textContent = "";
+        globalErrEl.style.display = "block";
+        globalErrEl.textContent = e.message;
+    }
+}
+
+/* boot */
+clearDetails();
+loadVersions();
+</script>
+
+</body>
+</html>

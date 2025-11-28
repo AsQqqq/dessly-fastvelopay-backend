@@ -144,3 +144,115 @@ async def get_online(
     )
 
     return {"online": count}
+
+
+# -----------------------------
+# Получение метрик
+# -----------------------------
+
+@router.get("/all")
+async def get_all_metrics(
+    auth_data=Depends(get_current_user_or_api_token),
+    db: Session = Depends(get_db)
+):
+    require_access_level(auth_data["token_obj"], 2)
+
+    metrics = db.query(PluginMetrics).all()
+
+    return [
+        {
+            "plugin_id": m.plugin_id,
+            "version": m.version,
+            "cardinal_version": m.cardinal_version,
+            "os": m.os,
+            "tasks_success": m.tasks_success,
+            "tasks_failed": m.tasks_failed,
+            "errors_total": m.errors_total,
+            "uptime": m.uptime,
+            "last_heartbeat": m.last_heartbeat,
+        }
+        for m in metrics
+    ]
+
+
+@router.get("/{plugin_id}")
+async def get_plugin_metrics(
+    plugin_id: str,
+    auth_data=Depends(get_current_user_or_api_token),
+    db: Session = Depends(get_db)
+):
+    require_access_level(auth_data["token_obj"], 2)
+
+    metrics = (
+        db.query(PluginMetrics)
+        .filter(PluginMetrics.plugin_id == plugin_id)
+        .first()
+    )
+
+    if not metrics:
+        raise HTTPException(404, "Plugin not found")
+
+    return {
+        "plugin_id": metrics.plugin_id,
+        "version": metrics.version,
+        "cardinal_version": metrics.cardinal_version,
+        "os": metrics.os,
+        "tasks_success": metrics.tasks_success,
+        "tasks_failed": metrics.tasks_failed,
+        "errors_total": metrics.errors_total,
+        "uptime": metrics.uptime,
+        "last_heartbeat": metrics.last_heartbeat,
+    }
+
+
+@router.get("/{plugin_id}/logs")
+async def get_plugin_logs(
+    plugin_id: str,
+    limit: int = 50,
+    auth_data=Depends(get_current_user_or_api_token),
+    db: Session = Depends(get_db)
+):
+    require_access_level(auth_data["token_obj"], 2)
+
+    logs = (
+        db.query(PluginImportantLog)
+        .filter(PluginImportantLog.plugin_id == plugin_id)
+        .order_by(PluginImportantLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "level": l.level,
+            "message": l.message,
+            "timestamp": l.timestamp
+        }
+        for l in logs
+    ]
+
+
+@router.get("/logs/all")
+async def get_all_logs(
+    limit: int = 200,
+    auth_data=Depends(get_current_user_or_api_token),
+    db: Session = Depends(get_db)
+):
+    require_access_level(auth_data["token_obj"], 2)
+
+    logs = (
+        db.query(PluginImportantLog)
+        .order_by(PluginImportantLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "plugin_id": l.plugin_id,
+            "level": l.level,
+            "message": l.message,
+            "timestamp": l.timestamp
+        }
+        for l in logs
+    ]

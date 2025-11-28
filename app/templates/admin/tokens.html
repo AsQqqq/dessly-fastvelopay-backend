@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление токенами</title>
+
+    <style>
+        :root {
+            --bg: #f6f6f6;
+            --card: #ffffff;
+            --text: #111;
+            --accent: #ff4e00;
+            --accent-hover: #cc3c00;
+        }
+        .dark {
+            --bg: #0d0d0d;
+            --card: #1a1a1a;
+            --text: #e7e7e7;
+            --accent: #ff6a00;
+            --accent-hover: #e05d00;
+        }
+
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: "Inter", sans-serif; }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 25px 40px;
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+        }
+
+        h1 { text-align: center; margin-top: 30px; }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 10px;
+        }
+
+        .search-box {
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto 12px auto;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 14px 0 14px 10px;
+            border-radius: 14px;
+            border: none;
+            outline: none;
+            font-size: 16px;
+            background: var(--card);
+            color: var(--text);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+            transition: .2s;
+        }
+        .search-input:focus {
+            box-shadow: 0 0 0 3px var(--accent);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: .6;
+            pointer-events: none;
+        }
+
+        .card {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            margin-bottom: 25px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .user-card {
+            padding: 20px;
+            border-radius: 16px;
+            background: var(--card);
+            box-shadow: 0 4px 18px rgba(0,0,0,0.2);
+            transition: box-shadow .15s ease, transform .15s ease;
+        }
+        .user-card:hover {
+            box-shadow: 0 10px 26px rgba(0,0,0,0.28);
+            transform: translateY(-1px);
+        }
+
+        .token {
+            padding: 12px;
+            border-radius: 10px;
+            margin: 8px 0;
+            background: #ffffff15;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .token-clickable {
+            cursor: pointer;
+            transition: background .15s ease, transform .15s ease;
+        }
+        .token-clickable:hover {
+            background: #ffffff22;
+            transform: translateY(-1px);
+        }
+
+        .btn {
+            padding: 10px 15px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        .btn:hover { background: var(--accent-hover); }
+
+        .btn-small { padding: 6px 10px; font-size: 13px; }
+
+        .theme-btn {
+            padding: 10px 14px;
+            background: var(--card);
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            color: var(--text);
+        }
+
+        .online-block {
+            font-size: 24px;
+            padding: 20px;
+            background: var(--card);
+            border-radius: 16px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .muted { opacity: .7; font-size: 13px; }
+        .err { color: #ff8080; font-size: 14px; margin-top: 6px; white-space: pre-wrap; }
+
+        .modal {
+            position: fixed;
+            top: 0; left: 0;
+            padding: 20px;
+            width: 100%; height: 100%;
+            background: #00000070;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .modal.hidden { display: none; }
+
+        .modal-content {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 16px;
+            width: 350px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+        }
+
+        .modal-content * {
+            max-width: 100%;
+        }
+
+        .modal-input {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            border: none;
+            outline: none;
+            background: var(--bg);
+            color: var(--text);
+            box-sizing: border-box;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .modal-body {
+            font-size: 14px;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+        .modal-body b { font-weight: 700; }
+
+        .modal-textarea {
+            width: 100%;
+            height: 120px;
+            border-radius: 10px;
+            border: none;
+            outline: none;
+            background: var(--bg);
+            color: var(--text);
+            padding: 10px;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        .copy-row {
+            display:flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .copy-row .btn-small { flex: 1; }
+
+        /* ======= MOBILE FIXES ======= */
+
+        @media (max-width: 600px) {
+
+            /* HEADER */
+            header {
+                padding: 12px 16px;
+                flex-wrap: wrap;
+                gap: 10px;
+                justify-content: center;
+                text-align: center;
+            }
+            header > div {
+                width: 100%;
+                font-size: 18px;
+                text-align: center;
+                margin-bottom: 5px;
+            }
+            header button {
+                flex: 1;
+                max-width: 150px;
+            }
+
+            /* SEARCH FIX */
+            .search-box {
+                max-width: 100%;
+                margin: 0 0 0 0;
+                margin-bottom: 20px;
+            }
+            .search-input {
+                padding: 12px 0 12px 5px;
+                font-size: 15px;
+                box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+            }
+            .search-icon {
+                right: 12px;
+                width: 20px;
+                height: 20px;
+                opacity: 0.5;
+            }
+
+            /* GRID FIX */
+            .grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .user-card {
+                padding: 15px;
+            }
+
+            /* CARD */
+            .card {
+                padding: 18px;
+            }
+
+            /* MODAL FIXES */
+            .modal-content * {
+                max-width: 100%;
+            }
+
+            .modal-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .modal-buttons .btn,
+            .modal-buttons .btn-small {
+                width: 100%;
+            }
+
+            /* tokens */
+            .token {
+                flex-direction: column;
+                text-align: left;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- ===== МОДАЛ ДЛЯ СОЗДАНИЯ ПОЛЬЗОВАТЕЛЯ ===== -->
+<div id="modalCreateUser" class="modal hidden">
+    <div class="modal-content">
+        <h2>Создание пользователя</h2>
+
+        <label>Имя пользователя:</label>
+        <input id="newUsername" class="modal-input" placeholder="username">
+
+        <div class="modal-buttons">
+            <button class="btn" onclick="createUser()">Создать</button>
+            <button class="btn btn-small" onclick="closeModal('modalCreateUser')">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== МОДАЛ ДЛЯ СОЗДАНИЯ ТОКЕНА ===== -->
+<div id="modalCreateToken" class="modal hidden">
+    <div class="modal-content">
+        <h2>Создание токена</h2>
+
+        <input id="tokenName" class="modal-input" placeholder="Название токена">
+        <input id="tokenDesc" class="modal-input" placeholder="Описание токена">
+        <input id="tokenLevel" type="number" class="modal-input" placeholder="Уровень доступа">
+
+        <div class="modal-buttons">
+            <button class="btn" onclick="createToken()">Создать</button>
+            <button class="btn btn-small" onclick="closeModal('modalCreateToken')">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== МОДАЛ ДЛЯ ИНФО О ПОЛЬЗОВАТЕЛЕ ===== -->
+<div id="modalUserInfo" class="modal hidden">
+    <div class="modal-content">
+        <h2>Информация о пользователе</h2>
+        <div id="modalUserBody" class="modal-body">Загрузка...</div>
+
+        <div class="modal-buttons" style="margin-top:15px;">
+            <button class="btn btn-small" onclick="closeModal('modalUserInfo')">Закрыть</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== МОДАЛ ДЛЯ ИНФО О ТОКЕНЕ ===== -->
+<div id="modalTokenInfo" class="modal hidden">
+    <div class="modal-content">
+        <h2>Информация о токене</h2>
+        <div id="modalTokenBody" class="modal-body">Загрузка...</div>
+
+        <div class="modal-buttons" style="margin-top:15px;">
+            <button class="btn btn-small" onclick="closeModal('modalTokenInfo')">Закрыть</button>
+        </div>
+    </div>
+</div>
+
+
+<header>
+    <div style="font-size: 20px; font-weight: 600;">FastVeloPay & DesslyHub - Токены</div>
+    <button class="btn" onclick="openModal('modalCreateUser')">Создать пользователя</button>
+    <button class="theme-btn" onclick="toggleTheme()">Тема</button>
+</header>
+
+<div class="container">
+    <h1>Управление токенами</h1>
+
+    <div class="search-box">
+        <input id="searchInput" class="search-input" placeholder="Поиск пользователей..." oninput="filterUsers()">
+        <svg class="search-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+    </div>
+
+    <div class="online-block" id="onlineBlock">Онлайн пользователей: загрузка...</div>
+
+    <div id="usersGrid" class="grid"></div>
+</div>
+
+<script>
+"use strict";
+
+function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
+    return m ? decodeURIComponent(m[2]) : null;
+}
+
+function toggleTheme() {
+    document.documentElement.classList.toggle("dark");
+}
+
+async function apiFetch(url, options = {}) {
+    const token = getCookie("admin_token");
+    const headers = {
+        ...(options.headers || {}),
+        "Authorization": "Bearer " + (token || "")
+    };
+
+    const resp = await fetch(url, {
+        credentials: "include",
+        ...options,
+        headers
+    });
+
+    if (!resp.ok) {
+        const txt = await resp.text().catch(() => "");
+        throw new Error(`${resp.status} ${resp.statusText}\n${txt}`);
+    }
+
+    const ct = resp.headers.get("content-type") || "";
+    if (ct.includes("application/json")) return resp.json();
+    return resp.text();
+}
+
+async function loadOnline() {
+    try {
+        const data = await apiFetch("/metrics/online");
+        document.getElementById("onlineBlock").textContent =
+            "Онлайн пользователей: " + (data.online ?? 0);
+    } catch (e) {
+        document.getElementById("onlineBlock").textContent =
+            "Онлайн пользователей: ошибка загрузки";
+    }
+}
+
+let allUsers = [];
+
+async function loadUsers() {
+    const grid = document.getElementById("usersGrid");
+    grid.innerHTML = `<div class="muted">Загрузка пользователей...</div>`;
+
+    try {
+        const data = await apiFetch("/auth/users");
+        const users = Array.isArray(data)
+            ? data
+            : (data.users || data.items || data.data || []);
+
+        allUsers = users;
+        renderUsers(users);
+
+    } catch (e) {
+        grid.innerHTML = `<div class="err">${e.message}</div>`;
+    }
+}
+
+function filterUsers() {
+    const q = document.getElementById("searchInput").value.toLowerCase();
+    const filtered = allUsers.filter(u => (u.username || "").toLowerCase().includes(q));
+    renderUsers(filtered);
+}
+
+function renderUsers(users) {
+    const grid = document.getElementById("usersGrid");
+
+    if (!users.length) {
+        grid.innerHTML = `<div class="muted">Ничего не найдено.</div>`;
+        return;
+    }
+
+    grid.innerHTML = "";
+
+    for (const user of users) {
+        const div = document.createElement("div");
+        div.className = "user-card";
+        div.innerHTML = `
+            <h3 onclick="openUserInfo('${user.uuid}')" style="cursor:pointer; user-select:none;">
+                ${user.username || user.name || user.login || "Без имени"}
+            </h3>
+            <div id="tokens_${user.uuid}">Загрузка токенов...</div>
+            <br>
+            <button class="btn btn-small" onclick="showCreateToken('${user.uuid}')">Создать токен</button>
+            <div id="err_${user.uuid}" class="err" style="display:none;"></div>
+        `;
+        grid.appendChild(div);
+
+        loadUserTokens(user.uuid);
+    }
+}
+
+async function loadUserTokens(uuid) {
+    const container = document.getElementById(`tokens_${uuid}`);
+    const errbox = document.getElementById(`err_${uuid}`);
+    if (errbox) { errbox.style.display = "none"; errbox.textContent = ""; }
+
+    container.innerHTML = `<div class="muted">Загрузка токенов...</div>`;
+
+    try {
+        const data = await apiFetch(`/auth/user/${uuid}`);
+        const tokens = data.tokens || [];
+
+        container.innerHTML = "";
+
+        if (!tokens.length) {
+            container.innerHTML = `<div class="muted">Токенов нет.</div>`;
+            return;
+        }
+
+        for (const token of tokens) {
+            const div = document.createElement("div");
+            div.className = "token token-clickable";
+            div.innerHTML = `
+                <div onclick="openTokenInfo('${token.uuid}')" style="flex:1;">
+                    <b>${token.name}</b><br>
+                    Уровень: ${token.access_level}<br>
+                    ${token.description || ""}
+                </div>
+
+                <button class="btn btn-small" onclick="event.stopPropagation(); deleteToken('${token.uuid}', '${uuid}')">Удалить</button>
+            `;
+            container.appendChild(div);
+        }
+    } catch (e) {
+        container.innerHTML = "";
+        if (errbox) {
+            errbox.style.display = "block";
+            errbox.textContent = e.message;
+        }
+    }
+}
+
+async function deleteToken(tokenUuid, userUuid) {
+    try {
+        await apiFetch(`/auth/token/${tokenUuid}`, { method: "GET" });
+        await loadUserTokens(userUuid);
+    } catch (e) {
+        alert("Не удалось удалить токен:\n" + e.message);
+    }
+}
+
+function showCreateToken(userUuid) {
+    currentUserForToken = userUuid;
+    openModal("modalCreateToken");
+}
+
+async function createToken() {
+    const name = document.getElementById("tokenName").value.trim();
+    const description = document.getElementById("tokenDesc").value.trim();
+    const access_level = Number(document.getElementById("tokenLevel").value);
+
+    if (!name) return alert("Название не может быть пустым");
+
+    try {
+        await apiFetch(`/auth/user/${currentUserForToken}/token/create`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                name,
+                description,
+                access_level
+            })
+        });
+
+        closeModal("modalCreateToken");
+
+        document.getElementById("tokenName").value = "";
+        document.getElementById("tokenDesc").value = "";
+        document.getElementById("tokenLevel").value = "";
+
+        loadUserTokens(currentUserForToken);
+
+    } catch (e) {
+        alert("Ошибка создания токена:\n" + e.message);
+    }
+}
+
+loadOnline();
+setInterval(loadOnline, 15000);
+loadUsers();
+
+let currentUserForToken = null;
+
+function openModal(id) {
+    document.getElementById(id).classList.remove("hidden");
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.add("hidden");
+}
+
+/* ===== НОВОЕ: ИНФО О ПОЛЬЗОВАТЕЛЕ ===== */
+async function openUserInfo(uuid) {
+    try {
+        document.getElementById("modalUserBody").innerHTML = "Загрузка...";
+        openModal("modalUserInfo");
+
+        const data = await apiFetch(`/auth/user/${uuid}`);
+        const tokens = data.tokens || [];
+
+        const tokensHtml = tokens.length
+            ? tokens.map(t => `
+                <div class="token token-clickable" onclick="openTokenInfo('${t.uuid}')">
+                    <div style="flex:1;">
+                        <b>${t.name}</b><br>
+                        Уровень: ${t.access_level}<br>
+                        ${t.description || ""}
+                    </div>
+                </div>
+            `).join("")
+            : `<div class="muted">Токенов нет.</div>`;
+
+        document.getElementById("modalUserBody").innerHTML = `
+            <b>Username:</b> ${data.username || "-"}<br>
+            <b>UUID:</b> ${data.uuid || "-"}<br><br>
+            <b>Токены пользователя:</b><br>
+            ${tokensHtml}
+        `;
+    } catch (e) {
+        document.getElementById("modalUserBody").innerHTML =
+            `<div class="err">${e.message}</div>`;
+    }
+}
+
+/* ===== НОВОЕ: ИНФО О ТОКЕНЕ ===== */
+async function openTokenInfo(tokenUuid) {
+    try {
+        document.getElementById("modalTokenBody").innerHTML = "Загрузка...";
+        openModal("modalTokenInfo");
+
+        const data = await apiFetch(`/auth/user/${tokenUuid}/token/data`);
+
+        document.getElementById("modalTokenBody").innerHTML = `
+            <b>Name:</b> ${data.name || "-"}<br>
+            <b>UUID:</b> ${data.uuid || "-"}<br>
+            <b>Access level:</b> ${data.access_level ?? "-"}<br>
+            <b>Description:</b> ${data.description || "-"}<br><br>
+            <b>Key:</b>
+            <textarea id="tokenKeyTextarea" class="modal-textarea" readonly>${data.key || ""}</textarea>
+            <div class="copy-row">
+                <button class="btn btn-small" onclick="copyTokenKey()">Скопировать key</button>
+                <button class="btn btn-small" onclick="copyTokenUuid()">Скопировать uuid</button>
+            </div>
+        `;
+    } catch (e) {
+        document.getElementById("modalTokenBody").innerHTML =
+            `<div class="err">${e.message}</div>`;
+    }
+}
+
+function copyTokenKey() {
+    const ta = document.getElementById("tokenKeyTextarea");
+    if (!ta) return;
+    ta.select();
+    ta.setSelectionRange(0, 999999);
+    document.execCommand("copy");
+}
+
+function copyTokenUuid() {
+    const body = document.getElementById("modalTokenBody");
+    if (!body) return;
+    const m = body.textContent.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    if (!m) return;
+    const tmp = document.createElement("textarea");
+    tmp.value = m[0];
+    document.body.appendChild(tmp);
+    tmp.select();
+    document.execCommand("copy");
+    document.body.removeChild(tmp);
+}
+
+async function createUser() {
+    const username = document.getElementById("newUsername").value.trim();
+    if (!username) return alert("Введите имя пользователя");
+
+    try {
+        await apiFetch("/auth/register", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ username })
+        });
+
+        closeModal("modalCreateUser");
+        document.getElementById("newUsername").value = "";
+
+        loadUsers();
+
+    } catch (e) {
+        alert("Ошибка создания пользователя:\n" + e.message);
+    }
+}
+
+</script>
+
+</body>
+</html>

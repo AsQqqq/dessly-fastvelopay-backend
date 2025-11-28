@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+
+    <style>
+        :root {
+            --bg: #f6f6f6;
+            --card: #ffffff;
+            --text: #111;
+            --accent: #ff4e00;
+            --accent-hover: #cc3c00;
+        }
+        .dark {
+            --bg: #0d0d0d;
+            --card: #1a1a1a;
+            --text: #e7e7e7;
+            --accent: #ff6a00;
+            --accent-hover: #e05d00;
+        }
+
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: "Inter", sans-serif; }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 25px 40px;
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 32px;
+            margin-bottom: 30px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+
+        .card {
+            background: var(--card);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            text-align: center;
+            transition: 0.25s;
+            cursor: pointer;
+        }
+        .card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.30);
+        }
+
+        a.card-link { color: inherit; text-decoration: none; }
+
+        .theme-btn {
+            border: none;
+            padding: 12px 18px;
+            border-radius: 12px;
+            background: var(--card);
+            color: var(--text);
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <div style="font-size: 20px; font-weight: 600;">FastVeloPay & DesslyHub</div>
+    <button class="theme-btn" onclick="toggleTheme()">Тема</button>
+</header>
+
+<h1>Админ-панель</h1>
+
+<div class="container">
+
+    <div class="grid">
+
+        {% if level >= 1 %}
+        <a class="card-link" href="/admin/news">
+            <div class="card">
+                <h2>Новости</h2>
+                <p>Создание и управление новостями</p>
+            </div>
+        </a>
+
+        <a class="card-link" href="/admin/tokens">
+            <div class="card">
+                <h2>Токены</h2>
+                <p>Просмотр и управление токенами</p>
+            </div>
+        </a>
+        {% endif %}
+
+        {% if level >= 2 %}
+
+        <a class="card-link" href="/admin/update">
+            <div class="card">
+                <h2>Обновления</h2>
+                <p>Управление версиями плагина</p>
+            </div>
+        </a>
+        {% endif %}
+
+    </div>
+
+</div>
+
+<script>
+function toggleTheme() {
+    document.documentElement.classList.toggle('dark');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Плагин Dessly & FastVeloPay</title>
+    <style>
+        :root {
+            --bg: #f6f6f6;
+            --card: #ffffff;
+            --text: #111;
+            --accent: #ff4e00;
+            --accent-hover: #cc3c00;
+        }
+        .dark {
+            --bg: #0d0d0d;
+            --card: #1a1a1a;
+            --text: #e7e7e7;
+            --accent: #ff6a00;
+            --accent-hover: #e05d00;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Inter", "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            transition: background 0.3s, color 0.3s;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 25px 40px;
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin: 40px 0 10px;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .hero-img {
+            width: 100%;
+            height: 260px;
+            background-size: cover;
+            background-position: center;
+            border-radius: 20px;
+            margin-bottom: 35px;
+            animation: fadeIn 1s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .token-block {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            text-align: center;
+            margin-bottom: 40px;
+            animation: fadeIn 1s ease;
+        }
+
+        input[type="text"] {
+            width: 60%;
+            padding: 12px 18px;
+            border-radius: 10px;
+            border: none;
+            outline: none;
+            font-size: 16px;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-size: 15px;
+            height: 20px;
+        }
+        .status.ok { color: #4caf50; }
+        .status.error { color: #ff5252; }
+        .status.loading { color: #aaa; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+
+        .block {
+            background: var(--card);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+            text-align: center;
+            transition: 0.3s;
+            cursor: pointer;
+            transform: translateY(0);
+        }
+        .block:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.25);
+        }
+
+        .btn {
+            margin-top: 10px;
+            padding: 12px 22px;
+            border: none;
+            border-radius: 10px;
+            background: var(--accent);
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.2s;
+        }
+        .btn:hover { background: var(--accent-hover); }
+        .btn:disabled { background: #555; cursor: not-allowed; }
+
+        footer {
+            margin-top: 60px;
+            padding: 30px;
+            text-align: center;
+            opacity: 0.6;
+            font-size: 14px;
+        }
+
+        .theme-btn {
+            padding: 10px 16px;
+            border-radius: 10px;
+            border: none;
+            background: var(--card);
+            color: var(--text);
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .theme-btn:hover {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div style="font-size: 20px; font-weight: 600;">FastVeloPay & DesslyHub</div>
+    <button class="theme-btn" onclick="toggleTheme()">Переключить тему</button>
+</header>
+
+<div class="container">
+    <div class="hero-img" style="background-image: url('/static/images/hero.jpg');"></div>
+
+    <h1>Скачивание плагина</h1>
+
+    <div class="token-block">
+        <label>Актуальная версия: {{ config_version }}</label><br>
+        <label>Активная версия: {{ config_active_version }}</label><br><br>
+
+        <label>Введите токен доступа</label><br><br>
+        <input type="text" id="token" placeholder="FastVeloPay токен">
+        <div id="status" class="status"></div>
+    </div>
+
+    <div class="grid">
+        <div class="block">
+            <h2>MacOS</h2>
+            <button class="btn" data-file="macos_zip" disabled>Скачать архив</button>
+        </div>
+
+        <div class="block">
+            <h2>Linux Server</h2>
+            <button class="btn" data-file="linux_desktop_zip" disabled>Скачать архив</button>
+        </div>
+    </div>
+</div>
+
+<footer>
+    FastVeloPay © 2025
+</footer>
+
+<script>
+function toggleTheme() {
+    document.documentElement.classList.toggle('dark');
+}
+
+const tokenInput = document.getElementById("token");
+const buttons = document.querySelectorAll(".btn");
+const statusDiv = document.getElementById("status");
+let debounceTimeout = null;
+
+async function checkToken(token) {
+    try {
+        statusDiv.textContent = "Проверка...";
+        statusDiv.className = "status loading";
+
+        const response = await fetch("/auth/check", {
+            method: "GET",
+            headers: { "Authorization": "Bearer " + token }
+        });
+
+        if (response.status === 200) {
+            statusDiv.textContent = "Токен подтверждён";
+            statusDiv.className = "status ok";
+            buttons.forEach(btn => btn.disabled = false);
+        } else {
+            statusDiv.textContent = "Ошибка токена";
+            statusDiv.className = "status error";
+            buttons.forEach(btn => btn.disabled = true);
+        }
+    } catch {
+        statusDiv.textContent = "Сетевая ошибка";
+        statusDiv.className = "status error";
+        buttons.forEach(btn => btn.disabled = true);
+    }
+}
+
+tokenInput.addEventListener("input", () => {
+    const token = tokenInput.value.trim();
+    buttons.forEach(btn => btn.disabled = true);
+    if (!token) { statusDiv.textContent = ""; return; }
+
+    clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(() => checkToken(token), 600);
+});
+
+buttons.forEach(btn => {
+    btn.addEventListener("click", async () => {
+        const token = tokenInput.value.trim();
+        const file = btn.dataset.file;
+        if (!token || !file) return;
+
+        btn.disabled = true;
+        try {
+            const response = await fetch(`/plugin/download_file?platform_file=${file}`, {
+                method: "GET",
+                headers: { "Authorization": "Bearer " + token }
+            });
+
+            if (!response.ok) throw new Error();
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = file;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch {
+            alert("Не удалось скачать файл");
+        }
+        btn.disabled = false;
+    });
+});
+</script>
+
+</body>
+</html>

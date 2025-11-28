@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Админка новостей</title>
+
+  <style>
+    :root {
+      --bg: #f6f6f6;
+      --card: #ffffff;
+      --text: #111;
+      --muted: #00000080;
+      --accent: #ff4e00;
+      --accent-hover: #cc3c00;
+      --accent-weak: #ff4e001a;
+      --good: #2ecc71;
+      --bad: #ff8080;
+      --border: #00000012;
+    }
+    .dark {
+      --bg: #0d0d0d;
+      --card: #1a1a1a;
+      --text: #e7e7e7;
+      --muted: #ffffff80;
+      --accent: #ff6a00;
+      --accent-hover: #e05d00;
+      --accent-weak: #ff6a001a;
+      --good: #37d67a;
+      --bad: #ff9a9a;
+      --border: #ffffff14;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    header {
+      display:flex;
+      justify-content: space-between;
+      align-items:center;
+      padding: 18px 26px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      backdrop-filter: blur(10px);
+      background: color-mix(in oklab, var(--bg), transparent 35%);
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+    }
+    header .title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: .2px;
+      white-space: nowrap;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: .15s ease;
+    }
+    .btn:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-ghost {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .btn-ghost:hover { background: color-mix(in oklab, var(--card), white 4%); }
+    .btn-small { padding: 6px 9px; font-size: 12px; border-radius: 8px; }
+    .btn-danger { background: #ff3b3b; }
+    .btn-danger:hover { background: #e02f2f; }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 16px;
+      min-height: calc(100vh - 82px);
+    }
+
+    .panel {
+      background: var(--card);
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      padding: 14px;
+      display:flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .search-row {
+      display:flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .search-input {
+      flex:1;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      outline: none;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 15px;
+      transition: .15s;
+    }
+    .search-input:focus { box-shadow: 0 0 0 3px var(--accent-weak); border-color: var(--accent); }
+
+    .filters {
+      display:flex;
+      gap: 6px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      padding: 6px 9px;
+      font-size: 12px;
+      border-radius: 999px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      opacity: .9;
+      user-select: none;
+    }
+    .chip.active {
+      background: var(--accent-weak);
+      border-color: var(--accent);
+      opacity: 1;
+      font-weight: 700;
+    }
+
+    .list {
+      overflow:auto;
+      padding-right: 2px;
+      display:flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .news-item {
+      padding: 12px;
+      border-radius: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: .12s ease;
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      align-items: center;
+    }
+    .news-item:hover { transform: translateY(-1px); border-color: color-mix(in oklab, var(--accent), var(--border) 70%); }
+    .news-item.selected {
+      background: color-mix(in oklab, var(--accent-weak), var(--bg) 80%);
+      border-color: var(--accent);
+    }
+
+    .news-title {
+      font-weight: 700;
+      font-size: 15px;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .news-meta {
+      grid-column: 1 / -1;
+      font-size: 12px;
+      color: var(--muted);
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .badge {
+      padding: 2px 7px;
+      font-size: 11px;
+      border-radius: 999px;
+      background: var(--card);
+      border: 1px solid var(--border);
+    }
+    .badge.good { color: var(--good); border-color: color-mix(in oklab, var(--good), var(--border) 70%); }
+    .badge.bad { color: var(--bad); border-color: color-mix(in oklab, var(--bad), var(--border) 70%); }
+
+    .editor-head {
+      display:flex;
+      justify-content: space-between;
+      align-items:center;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .editor-head h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .field {
+      display:flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+    .input, .textarea {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      font-size: 15px;
+      transition: .15s;
+    }
+    .input:focus, .textarea:focus { box-shadow: 0 0 0 3px var(--accent-weak); border-color: var(--accent); }
+    .textarea {
+      min-height: 260px;
+      resize: vertical;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .switch-row {
+      display:flex;
+      align-items:center;
+      gap: 8px;
+      font-size: 14px;
+      margin-top: 2px;
+    }
+    .switch {
+      width: 46px;
+      height: 26px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      position: relative;
+      cursor: pointer;
+      transition: .15s ease;
+      flex-shrink: 0;
+    }
+    .switch::after {
+      content:"";
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 22px; height: 22px;
+      background: var(--card);
+      border-radius: 999px;
+      transition: .15s ease;
+      box-shadow: 0 2px 7px rgba(0,0,0,.25);
+    }
+    .switch.on { background: var(--accent-weak); border-color: var(--accent); }
+    .switch.on::after { left: 22px; background: var(--accent); }
+
+    .preview {
+      background: var(--bg);
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: pre-wrap;
+      max-height: 220px;
+      overflow:auto;
+    }
+
+    .muted { color: var(--muted); font-size: 13px; }
+    .err { color: var(--bad); font-size: 14px; white-space: pre-wrap; }
+
+    .row-actions {
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    .empty {
+      text-align:center;
+      padding: 30px 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* ===== MOBILE ===== */
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      header { padding: 12px 14px; flex-wrap: wrap; }
+      header .title { width: 100%; text-align:center; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title">FastVeloPay & DesslyHub — Новости</div>
+  <div style="display:flex; gap:8px;">
+    <button class="btn" id="btnNew">+ Новость</button>
+    <button class="btn btn-ghost" id="btnTheme">Тема</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="layout">
+
+    <!-- LEFT: LIST -->
+    <aside class="panel">
+      <div class="search-row">
+        <input id="searchInput" class="search-input" placeholder="Поиск по заголовку..." />
+        <button class="btn btn-small" id="btnReload">Обновить</button>
+      </div>
+
+      <div class="filters">
+        <div class="chip active" data-filter="all">Все</div>
+        <div class="chip" data-filter="active">Активные</div>
+        <div class="chip" data-filter="inactive">Неактивные</div>
+      </div>
+
+      <div id="newsList" class="list"></div>
+    </aside>
+
+    <!-- RIGHT: PREVIEW + EDITOR -->
+    <main class="panel">
+      <div class="editor-head">
+        <h2 id="editorTitle">Создание новости</h2>
+        <div class="row-actions">
+          <button class="btn btn-small" id="btnMarkRead" style="display:none;">Отметить прочитанной</button>
+          <button class="btn btn-small btn-danger" id="btnDelete" style="display:none;">Удалить</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Заголовок</label>
+        <input id="titleInput" class="input" placeholder="Например: Обновление 1.4.7" />
+      </div>
+
+      <div class="field">
+        <label>Текст новости</label>
+        <textarea id="contentInput" class="textarea" placeholder="Текст новости..."></textarea>
+      </div>
+
+      <!-- <div class="field">
+        <label>Активность</label>
+        <div class="switch-row">
+          <div id="activeSwitch" class="switch on"></div>
+          <div id="activeLabel">Активна</div>
+        </div>
+      </div> -->
+
+      <div class="field">
+        <label>Предпросмотр</label>
+        <div id="previewBox" class="preview muted">Пока пусто…</div>
+      </div>
+
+      <div class="row-actions">
+        <button class="btn" id="btnSave">Опубликовать</button>
+        <button class="btn btn-ghost" id="btnClear">Очистить</button>
+      </div>
+
+      <div id="editorMeta" class="muted" style="margin-top:8px;"></div>
+      <div id="editorError" class="err" style="margin-top:8px; display:none;"></div>
+    </main>
+
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ===== helpers (как в tokens.html) ===== */
+function getCookie(name) {
+  const m = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[2]) : null;
+}
+
+function toggleTheme() {
+  document.documentElement.classList.toggle("dark");
+}
+
+async function apiFetch(url, options = {}) {
+  const token = getCookie("admin_token");
+  const headers = {
+    ...(options.headers || {}),
+    "Authorization": "Bearer " + (token || "")
+  };
+
+  const resp = await fetch(url, {
+    credentials: "include",
+    ...options,
+    headers
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => "");
+    throw new Error(`${resp.status} ${resp.statusText}\n${txt}`);
+  }
+
+  const ct = resp.headers.get("content-type") || "";
+  if (ct.includes("application/json")) return resp.json();
+  return resp.text();
+}
+
+/* ===== state ===== */
+let allNews = [];
+let selectedId = null;
+let currentFilter = "all";
+
+/* ===== DOM ===== */
+const newsListEl = document.getElementById("newsList");
+const searchInputEl = document.getElementById("searchInput");
+const editorTitleEl = document.getElementById("editorTitle");
+const titleInputEl = document.getElementById("titleInput");
+const contentInputEl = document.getElementById("contentInput");
+// const activeSwitchEl = document.getElementById("activeSwitch");
+const activeLabelEl = document.getElementById("activeLabel");
+const previewBoxEl = document.getElementById("previewBox");
+const editorMetaEl = document.getElementById("editorMeta");
+const editorErrorEl = document.getElementById("editorError");
+
+const btnNew = document.getElementById("btnNew");
+const btnTheme = document.getElementById("btnTheme");
+const btnReload = document.getElementById("btnReload");
+const btnSave = document.getElementById("btnSave");
+const btnClear = document.getElementById("btnClear");
+const btnDelete = document.getElementById("btnDelete");
+const btnMarkRead = document.getElementById("btnMarkRead");
+
+/* ===== UI actions ===== */
+btnTheme.onclick = toggleTheme;
+btnReload.onclick = loadNews;
+btnNew.onclick = () => selectNews(null);
+btnClear.onclick = clearEditor;
+btnSave.onclick = createNews;
+btnDelete.onclick = deleteSelectedNews;
+btnMarkRead.onclick = markReadSelectedNews;
+
+// activeSwitchEl.onclick = () => {
+//   activeSwitchEl.classList.toggle("on");
+//   activeLabelEl.textContent = activeSwitchEl.classList.contains("on") ? "Активна" : "Неактивна";
+//   updatePreview();
+// };
+
+searchInputEl.oninput = renderNewsList;
+titleInputEl.oninput = updatePreview;
+contentInputEl.oninput = updatePreview;
+
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.onclick = () => {
+    document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    currentFilter = chip.dataset.filter;
+    renderNewsList();
+  };
+});
+
+/* ===== logic ===== */
+function normalizeNewsList(data) {
+  if (Array.isArray(data)) return data;
+  if (data?.news) return data.news;
+  if (data?.items) return data.items;
+  if (data?.data) return data.data;
+  return [];
+}
+
+function getId(n) {
+  return n.id ?? n.news_id ?? n.uuid ?? n._id;
+}
+
+function getTitle(n) {
+  return n.title ?? n.name ?? "Без заголовка";
+}
+
+function getContent(n) {
+  return n.content ?? n.text ?? n.body ?? "";
+}
+
+function getIsActive(n) {
+  return (n.is_active ?? n.active ?? n.enabled ?? false) === true;
+}
+
+function getCreatedAt(n) {
+  return n.created_at ?? n.created ?? n.date ?? n.timestamp ?? null;
+}
+
+function renderNewsList() {
+  const q = (searchInputEl.value || "").toLowerCase().trim();
+
+  let items = allNews.slice();
+
+  if (currentFilter === "active") items = items.filter(n => getIsActive(n));
+  if (currentFilter === "inactive") items = items.filter(n => !getIsActive(n));
+
+  if (q) items = items.filter(n => getTitle(n).toLowerCase().includes(q));
+
+  // сортировка: новые сверху (если есть дата), иначе по id desc
+  items.sort((a, b) => {
+    const da = new Date(getCreatedAt(a) || 0).getTime();
+    const db = new Date(getCreatedAt(b) || 0).getTime();
+    if (da && db) return db - da;
+    return (getId(b) || 0) - (getId(a) || 0);
+  });
+
+  newsListEl.innerHTML = "";
+
+  if (!items.length) {
+    newsListEl.innerHTML = `<div class="empty">Новостей нет 😶</div>`;
+    return;
+  }
+
+  for (const n of items) {
+    const id = getId(n);
+    const title = getTitle(n);
+    const active = getIsActive(n);
+    const createdAt = getCreatedAt(n);
+
+    const div = document.createElement("div");
+    div.className = "news-item" + (id === selectedId ? " selected" : "");
+    div.onclick = () => selectNews(id);
+
+    div.innerHTML = `
+      <div class="news-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+      <div class="badge ${active ? "good" : "bad"}">${active ? "active" : "inactive"}</div>
+      <div class="news-meta">
+        <span class="badge">id: ${escapeHtml(String(id ?? "-"))}</span>
+        ${createdAt ? `<span class="badge">${escapeHtml(formatDate(createdAt))}</span>` : ""}
+      </div>
+    `;
+
+    newsListEl.appendChild(div);
+  }
+}
+
+function selectNews(id) {
+  selectedId = id;
+
+  // выделение в списке
+  renderNewsList();
+
+  const n = allNews.find(x => getId(x) === id);
+
+  if (!n) {
+    // режим создания
+    editorTitleEl.textContent = "Создание новости";
+    btnDelete.style.display = "none";
+    btnMarkRead.style.display = "none";
+    editorMetaEl.textContent = "";
+    clearEditor(false);
+    return;
+  }
+
+  editorTitleEl.textContent = "Просмотр новости";
+  titleInputEl.value = getTitle(n);
+  contentInputEl.value = getContent(n);
+
+  const active = getIsActive(n);
+//   activeSwitchEl.classList.toggle("on", active);
+//   activeLabelEl.textContent = active ? "Активна" : "Неактивна";
+
+  btnDelete.style.display = "inline-block";
+  btnMarkRead.style.display = "inline-block";
+
+  const createdAt = getCreatedAt(n);
+  editorMetaEl.textContent =
+    `id: ${getId(n)}${createdAt ? " · " + formatDate(createdAt) : ""}`;
+
+  updatePreview();
+}
+
+function clearEditor(resetSelection = true) {
+  titleInputEl.value = "";
+  contentInputEl.value = "";
+//   activeSwitchEl.classList.add("on");
+//   activeLabelEl.textContent = "Активна";
+  editorMetaEl.textContent = "";
+  editorErrorEl.style.display = "none";
+  editorErrorEl.textContent = "";
+  updatePreview();
+  if (resetSelection) selectNews(null);
+}
+
+function updatePreview() {
+  const t = titleInputEl.value.trim();
+  const c = contentInputEl.value.trim();
+//   const a = activeSwitchEl.classList.contains("on");
+
+  if (!t && !c) {
+    previewBoxEl.innerHTML = `<span class="muted">Пока пусто…</span>`;
+    return;
+  }
+
+  previewBoxEl.innerHTML = `
+    <div style="font-weight:800; font-size:16px; margin-bottom:6px;">${escapeHtml(t || "Без заголовка")}</div>
+    <div>${escapeHtml(c || "Без текста")}</div>
+  `;
+
+//   <div style="opacity:.7; font-size:12px; margin-bottom:8px;">
+//       ${a ? "Активная новость" : "Неактивная новость"}
+//     </div>
+}
+
+async function loadNews() {
+  newsListEl.innerHTML = `<div class="empty">Загрузка…</div>`;
+  editorErrorEl.style.display = "none";
+  try {
+    const data = await apiFetch("/news/get");
+    allNews = normalizeNewsList(data);
+    renderNewsList();
+
+    // если ничего не выбрано — открыть первую
+    if (selectedId == null && allNews.length) {
+      selectNews(getId(allNews[0]));
+    }
+  } catch (e) {
+    newsListEl.innerHTML = `<div class="err">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function createNews() {
+  const title = titleInputEl.value.trim();
+  const content = contentInputEl.value.trim();
+//   const is_active = activeSwitchEl.classList.contains("on");
+  const b = true
+
+  if (!title) return showEditorError("Заголовок не может быть пустым");
+  if (!content) return showEditorError("Текст новости не может быть пустым");
+
+  try {
+    await apiFetch("/news/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, content, b })
+    });
+
+    clearEditor();
+    await loadNews();
+  } catch (e) {
+    showEditorError(e.message);
+  }
+}
+
+async function deleteSelectedNews() {
+  if (selectedId == null) return;
+  if (!confirm("Удалить новость?")) return;
+
+  try {
+    await apiFetch(`/news/delete/${selectedId}`, { method: "POST" });
+    selectedId = null;
+    clearEditor(false);
+    await loadNews();
+  } catch (e) {
+    showEditorError(e.message);
+  }
+}
+
+async function markReadSelectedNews() {
+  if (selectedId == null) return;
+
+  try {
+    await apiFetch(`/news/read/${selectedId}`, { method: "POST" });
+    // просто перезагрузим (если сервер меняет флаг прочитанности)
+    await loadNews();
+  } catch (e) {
+    showEditorError(e.message);
+  }
+}
+
+function showEditorError(msg) {
+  editorErrorEl.style.display = "block";
+  editorErrorEl.textContent = msg;
+}
+
+/* ===== utils ===== */
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+function formatDate(v) {
+  try {
+    const d = new Date(v);
+    if (isNaN(d)) return String(v);
+    return d.toLocaleString("ru-RU");
+  } catch {
+    return String(v);
+  }
+}
+
+/* boot */
+clearEditor(false);
+loadNews();
+</script>
+
+</body>
+</html>
