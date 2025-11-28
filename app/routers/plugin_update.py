@@ -2,7 +2,7 @@
 Модуль для версиями обновления
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
 from pydantic import BaseModel
 import re, json, os
 from sqlalchemy.orm import Session
@@ -11,7 +11,7 @@ from app.dependencies import get_db
 from app.database import UpdatePlugin
 from app.auth import get_current_user_or_api_token, require_access_level
 from app.config import get_config_value, CONFIG_PATH, load_config, settings
-import aiohttp
+import aiohttp, asyncio
 import shutil
 
 
@@ -27,6 +27,9 @@ class NewUpdate(BaseModel):
     name: str
     version: str
     description: str
+
+class RollbackRequest(BaseModel):
+    version: str
 
 
 # ==============================
@@ -144,7 +147,8 @@ async def new_update(
     db.add(update_record)
     db.commit()
     db.refresh(update_record)
-    await download_update(version=version)
+    
+    # await download_update(version=version)
 
     # Обновляем config.json
     try:
@@ -165,68 +169,76 @@ async def new_update(
         "description": description
     }
 
-
 @router.post("/rollback")
 async def rollback_update(
+    data: RollbackRequest,
     auth_data=Depends(get_current_user_or_api_token),
     db: Session = Depends(get_db),
 ):
     """
     Откат актуальной версии плагина к активной версии у пользователей.
     """
+
     if auth_data["type"] != "api_token":
         raise HTTPException(status_code=403, detail="Недостаточно прав.")
     
     token = auth_data["token_obj"]
     require_access_level(token, 2)
 
-    # Получаем версии из конфигурации
-    active_version = get_config_value("version_update_active", default="0.0.0.0")
-    current_version = get_config_value("version_update", default="0.0.0.0")
+    version_to_remove = data.version
 
-    # Проверка, нужно ли откатывать
-    if is_version_higher(active_version, current_version):
+    # Проверяем, что такая версия вообще есть в истории
+    update_entry = db.query(UpdatePlugin).filter(
+        UpdatePlugin.new_version == version_to_remove
+    ).first()
+
+    if not update_entry:
         raise HTTPException(
-            status_code=400,
-            detail=f"Откат невозможен: активная версия ({active_version}) выше или равна актуальной ({current_version})"
+            status_code=404,
+            detail=f"Версия {version_to_remove} не найдена."
         )
 
-    # Удаляем записи обновлений, которые были после активной версии
-    updates_to_remove = db.query(UpdatePlugin).filter(
-        UpdatePlugin.new_version == current_version
-    ).all()
+    # Активная версия
+    active_version = get_config_value("version_update_active", default="0.0.0.0")
 
-    # Откатываем актуальную версию в config.json
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            config = json.load(f)
+    # Нельзя удалять активную
+    if version_to_remove == active_version:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя откатывать активную версию."
+        )
 
-        config["version_update"] = active_version
-
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4, ensure_ascii=False)
-
-        load_config()
-        logger.info(f"Rollback: версия {current_version} -> {active_version}")
-
-        # Удаляем папку с версией, если она существует
-        release_folder = os.path.join(folder_update, current_version)
-        if os.path.exists(release_folder):
-            shutil.rmtree(release_folder)
-            logger.info(f"Папка с версией {current_version} удалена с сервера.")
-
-    except Exception as e:
-        logger.error(f"Ошибка при откате config.json: {e}")
-        raise HTTPException(status_code=500, detail=f"Ошибка отката: {e}")
-
-    for update in updates_to_remove:
-        db.delete(update)
+    # Удаляем запись
+    db.delete(update_entry)
     db.commit()
 
+    # Если удалили текущую — активируем активную
+    current_version = get_config_value("version_update", default="0.0.0.0")
+
+    if version_to_remove == current_version:
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                config = json.load(f)
+
+            config["version_update"] = active_version
+
+            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=4, ensure_ascii=False)
+
+            load_config()
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка обновления config.json: {e}")
+
+        # Удаляем папку релиза
+        release_folder = os.path.join(folder_update, version_to_remove)
+        if os.path.exists(release_folder):
+            shutil.rmtree(release_folder)
+
     return {
-        "message": "Откат успешно выполнен",
-        "rolled_back_to": active_version,
-        "removed_update_version": current_version
+        "message": "Откат выполнен",
+        "removed": version_to_remove,
+        "active_now": active_version
     }
 
 
@@ -294,9 +306,13 @@ async def download_update(version: str):
     logger.info(f"🎉 Все файлы релиза '{version}' проверены и скачаны в: {release_folder}")
 
 
-@router.post("/download")
-async def new_update(
-    payload: NewUpdate,
+def run_async_sync(coro, *args, **kwargs):
+    asyncio.run(coro(*args, **kwargs))
+
+
+@router.get("/download")
+async def download_files(
+    background_tasks: BackgroundTasks,
     auth_data=Depends(get_current_user_or_api_token),
     db: Session = Depends(get_db),
 ):
@@ -309,5 +325,5 @@ async def new_update(
     require_access_level(token, 2)
 
     config_version = get_config_value(key="version_update", default="None")
-    await download_update(version=config_version)
-    return True
+    background_tasks.add_task(run_async_sync, download_update, version=config_version)
+    return {"status": "ok", "version": config_version}

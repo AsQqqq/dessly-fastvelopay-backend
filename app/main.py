@@ -7,7 +7,7 @@
 from fastapi import FastAPI
 from fastapi import Depends, Header, Request
 from typing import Optional
-from app.routers import white_domains, auth, plugin_update, news, download
+from app.routers import white_domains, auth, plugin_update, news, download, metrics, admin
 from app.routers.dessly import steam, account, currency
 from fastapi.middleware.cors import CORSMiddleware
 from app.dependencies import get_db
@@ -17,6 +17,7 @@ from app.auth import (
     get_api_token_from_header, 
     create_audit_record
 )
+from fastapi.staticfiles import StaticFiles
 from cl import logger
 import time, json
 from app.config import CONFIG_PATH, load_config, config_cache
@@ -24,6 +25,7 @@ import collections
 
 # Отключаем автогенерацию docs
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 logger.info("FastAPI application initialized (API-only mode)")
 
 def custom_openapi():
@@ -134,4 +136,6 @@ app.include_router(account.router)
 app.include_router(plugin_update.router)
 app.include_router(currency.router)
 app.include_router(news.router)
+app.include_router(metrics.router)
+app.include_router(admin.router)
 app.include_router(download.router)

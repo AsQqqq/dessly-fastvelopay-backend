@@ -27,7 +27,7 @@ PLATFORM_FILES = {
     "linux_desktop_installer": "installer_linux",
     "linux_desktop_zip": "Linux.zip",
     "windows_installer": "installer_windows.exe",
-    "windows_zip": "Windows.zip"
+    "windows_zip": "Windows.zip",
 }
 
 

@@ -128,11 +128,18 @@ def get_current_user_or_api_token(request: Request, db: Session = Depends(get_db
 
 def require_access_level(token: APIToken, min_level: int):
     """Проверяет, что токен имеет необходимый уровень доступа."""
+    
     if token.access_level < min_level:
         raise HTTPException(
             status_code=403,
             detail=f"Недостаточно прав.",
         )
+
+
+def get_require_access_level(token: APIToken):
+    """Возвращает левел токена"""
+
+    return int(token.access_level)
     
 
 def get_api_token_from_header(

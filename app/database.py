@@ -164,6 +164,40 @@ class UserNewsRead(Base):
         return f"<UserNewsRead(user_id={self.user_id}, news_id={self.news_id}, read_at={self.read_at})>"
 
 
+class PluginMetrics(Base):
+    __tablename__ = "plugin_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    plugin_id = Column(String, index=True)  # UUID плагина
+    token_id = Column(Integer, ForeignKey("api_tokens.id"), nullable=False)
+
+    version = Column(String, nullable=False)
+    cardinal_version = Column(String, nullable=True)
+    os = Column(String, nullable=True)
+
+    tasks_success = Column(Integer, default=0)
+    tasks_failed = Column(Integer, default=0)
+    errors_total = Column(Integer, default=0)
+
+    uptime = Column(Integer, default=0)
+
+    last_heartbeat = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class PluginImportantLog(Base):
+    __tablename__ = "plugin_important_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    plugin_id = Column(String, index=True)
+    token_id = Column(Integer, ForeignKey("api_tokens.id"), nullable=False)
+
+    level = Column(String, nullable=False)  # ERROR, WARNING, CRITICAL
+    message = Column(Text, nullable=False)
+
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
 
 # ==============================
 # Инициализация базы данных

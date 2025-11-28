@@ -64,6 +64,7 @@ async def get_news(
     Возвращает список активных новостей.
     Добавляет флаг `is_read`, показывающий, читал ли пользователь новость.
     """
+    
     if auth_data["type"] != "api_token":
         raise HTTPException(status_code=400, detail="Use API token for this endpoint")
 
