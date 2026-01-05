@@ -230,3 +230,4 @@ pip-selfcheck.json
 files/*
 git_test.py
 *.DS_Store
+logs/*
