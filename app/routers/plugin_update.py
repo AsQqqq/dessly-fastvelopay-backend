@@ -5,9 +5,10 @@
 from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
 from pydantic import BaseModel
 import re, json, os
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from cl import logger
-from app.dependencies import get_db
+from app.database import get_db
 from app.database import UpdatePlugin
 from app.auth import get_current_user_or_api_token, require_access_level
 from app.config import get_config_value, CONFIG_PATH, load_config, settings
@@ -53,7 +54,7 @@ VERSION_REGEX = r"^\d+\.\d+\.\d+\.\d+$"
 async def get_version(
     request: Request,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Получение информации о версиях плагина:
@@ -100,7 +101,7 @@ async def get_version(
 async def new_update(
     payload: NewUpdate,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Обновление плагина"""
     
@@ -173,7 +174,7 @@ async def new_update(
 async def rollback_update(
     data: RollbackRequest,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Откат актуальной версии плагина к активной версии у пользователей.
@@ -314,7 +315,7 @@ def run_async_sync(coro, *args, **kwargs):
 async def download_files(
     background_tasks: BackgroundTasks,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Скачивание файлов на сервер"""
     

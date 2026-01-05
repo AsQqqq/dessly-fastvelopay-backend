@@ -7,8 +7,9 @@ from fastapi import APIRouter, HTTPException, Header, Request, Depends
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import FileResponse
 from app.config import get_config_value
-from app.dependencies import get_db
-from sqlalchemy.orm import Session
+from app.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from cl import logger
 import os
 
@@ -53,7 +54,7 @@ async def download_update(request: Request):
 
 
 @router.get("/download_file")
-async def download_file(request: Request, platform_file: str, authorization: str = Header(None), db: Session = Depends(get_db)):
+async def download_file(request: Request, platform_file: str, authorization: str = Header(None), db: AsyncSession = Depends(get_db)):
     """
     Отдаёт файл плагина по платформе/типу файла, если токен валидный.
     """
@@ -61,7 +62,7 @@ async def download_file(request: Request, platform_file: str, authorization: str
     logger.info(f"Заголовок Authorization: {authorization}")
 
     # Получаем данные пользователя или токена
-    auth_data = get_current_user_or_api_token(request, db)
+    auth_data = await get_current_user_or_api_token(request, db)
     logger.info(f"Тип авторизации: {auth_data['type']}")
 
     # Проверка токена на admin

@@ -24,4 +24,4 @@ ENV ENV_FILE=/app/.env
 EXPOSE 8080
 
 # Запуск uvicorn с поддержкой проксирования заголовка X-Forwarded-For
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--reload", "--proxy-headers"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]

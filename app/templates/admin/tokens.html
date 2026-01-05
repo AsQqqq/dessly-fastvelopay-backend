@@ -31,6 +31,7 @@
             backdrop-filter: blur(10px);
             position: sticky;
             top: 0;
+            z-index: 10;
         }
 
         h1 { text-align: center; margin-top: 30px; }
@@ -300,6 +301,86 @@
                 gap: 10px;
             }
         }
+
+        .log-line {
+            font-family: monospace;
+            padding: 6px 10px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+        }
+
+        .log-INFO {
+            background: #0099ff22;
+            border-left: 4px solid #0099ff;
+        }
+
+        .log-WARNING {
+            background: #ffcc0022;
+            border-left: 4px solid #ffcc00;
+        }
+
+        .log-ERROR {
+            background: #ff444422;
+            border-left: 4px solid #ff4444;
+        }
+
+        .log-DEBUG {
+            background: #aa00ff22;
+            border-left: 4px solid #aa00ff;
+        }
+
+        .log-CRITICAL {
+            background: #ff330022;
+            border-left: 4px solid #ff3300;
+        }
+
+        /* sentinel */
+        #usersSentinel {
+            height: 1px;
+        }
+
+        /* ===== ТЕРМИНАЛ ДЛЯ ЛОГОВ ===== */
+
+        .terminal-log-wrapper {
+            background: #000;
+            border-radius: 10px;
+            padding: 15px;
+            max-height: 60vh;
+            overflow-y: auto;
+            font-family: monospace;
+            color: #d0d0d0;
+            border: 1px solid #333;
+            box-shadow: inset 0 0 10px #000;
+        }
+
+        /* Линии логов */
+        .terminal-line {
+            padding: 4px 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border-bottom: 1px solid #111;
+        }
+
+        /* Цвета уровней */
+        .terminal-INFO { color: #4aa3ff; }
+        .terminal-WARNING { color: #ffcc00; }
+        .terminal-ERROR { color: #ff4444; }
+        .terminal-DEBUG { color: #b564ff; }
+        .terminal-CRITICAL { color: #ff3300; }
+
+        .terminal-timestamp {
+            opacity: .6;
+        }
+
+        .modal-footer-fixed {
+            position: sticky;
+            bottom: 0;
+            background: var(--card);
+            padding-top: 10px;
+            padding-bottom: 5px;
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.4);
+        }
+
     </style>
 </head>
 
@@ -317,6 +398,32 @@
             <button class="btn" onclick="createUser()">Создать</button>
             <button class="btn btn-small" onclick="closeModal('modalCreateUser')">Отмена</button>
         </div>
+    </div>
+</div>
+
+<!-- ===== МОДАЛ МЕТРИК И ЛОГОВ ПОЛЬЗОВАТЕЛЯ ===== -->
+<div id="modalUserDiag" class="modal hidden">
+    <div class="modal-content" style="width:600px; max-height:80vh; display:flex; flex-direction:column;">
+        
+        <h2>Диагностика пользователя</h2>
+
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button id="btnLoadMetrics" class="btn btn-small">Метрики</button>
+            <button id="btnLoadLogs" class="btn btn-small">Логи</button>
+        </div>
+
+        <!-- Логи / метрики — делаем область прокрутки -->
+        <div id="diagBody"
+             class="modal-body"
+             style="flex:1; overflow-y:auto; margin-bottom:10px;">
+            Выберите, что нужно загрузить.
+        </div>
+
+        <!-- Фиксированная нижняя панель -->
+        <div class="modal-footer-fixed">
+            <button class="btn btn-small" onclick="closeModal('modalUserDiag')">Закрыть</button>
+        </div>
+
     </div>
 </div>
 
@@ -381,10 +488,14 @@
     <div class="online-block" id="onlineBlock">Онлайн пользователей: загрузка...</div>
 
     <div id="usersGrid" class="grid"></div>
+    <!-- sentinel для бесконечной подгрузки -->
+    <div id="usersSentinel"></div>
 </div>
 
 <script>
 "use strict";
+
+/* ===== УТИЛИТЫ ===== */
 
 function getCookie(name) {
     const m = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
@@ -418,6 +529,8 @@ async function apiFetch(url, options = {}) {
     return resp.text();
 }
 
+/* ===== ОНЛАЙН ===== */
+
 async function loadOnline() {
     try {
         const data = await apiFetch("/metrics/online");
@@ -429,77 +542,149 @@ async function loadOnline() {
     }
 }
 
-let allUsers = [];
+/* ===== СОСТОЯНИЕ ПОЛЬЗОВАТЕЛЕЙ + ПАГИНАЦИЯ ===== */
 
-async function loadUsers() {
-    const grid = document.getElementById("usersGrid");
-    grid.innerHTML = `<div class="muted">Загрузка пользователей...</div>`;
+let allUsers = [];
+let currentPage = 1;
+const PAGE_SIZE = 30;
+let isLoadingUsers = false;
+let usersFinished = false;
+
+const usersGrid = document.getElementById("usersGrid");
+const usersSentinel = document.getElementById("usersSentinel");
+
+function isSearchActive() {
+    const q = document.getElementById("searchInput").value.trim();
+    return q.length > 0;
+}
+
+async function loadUsersPage() {
+    if (isLoadingUsers || usersFinished) return;
+
+    isLoadingUsers = true;
+
+    // мягкий loader
+    if (!allUsers.length && !isSearchActive()) {
+        usersGrid.innerHTML = `<div class="muted">Загрузка пользователей...</div>`;
+    }
 
     try {
-        const data = await apiFetch("/auth/users");
+        const data = await apiFetch(`/auth/users?page=${currentPage}&limit=${PAGE_SIZE}`);
         const users = Array.isArray(data)
             ? data
             : (data.users || data.items || data.data || []);
 
-        allUsers = users;
-        renderUsers(users);
+        if (!users.length) {
+            usersFinished = true;
+            if (!allUsers.length) {
+                usersGrid.innerHTML = `<div class="muted">Пользователей нет.</div>`;
+            }
+            return;
+        }
+
+        allUsers = allUsers.concat(users);
+
+        // если поиска нет — показываем всех, если есть — фильтруем
+        if (isSearchActive()) {
+            filterUsers();
+        } else {
+            renderUsers(allUsers);
+        }
+
+        currentPage++;
 
     } catch (e) {
-        grid.innerHTML = `<div class="err">${e.message}</div>`;
+        usersGrid.innerHTML = `<div class="err">${e.message}</div>`;
+    } finally {
+        isLoadingUsers = false;
     }
 }
 
+/* ===== ПОИСК ===== */
+
 function filterUsers() {
-    const q = document.getElementById("searchInput").value.toLowerCase();
-    const filtered = allUsers.filter(u => (u.username || "").toLowerCase().includes(q));
-    renderUsers(filtered);
-}
-
-function renderUsers(users) {
-    const grid = document.getElementById("usersGrid");
-
-    if (!users.length) {
-        grid.innerHTML = `<div class="muted">Ничего не найдено.</div>`;
+    const q = document.getElementById("searchInput").value.toLowerCase().trim();
+    if (!q) {
+        renderUsers(allUsers);
         return;
     }
 
-    grid.innerHTML = "";
+    const filtered = allUsers.filter(u =>
+        (u.username || u.name || u.login || "")
+            .toLowerCase()
+            .includes(q)
+    );
+
+    renderUsers(filtered);
+}
+
+/* ===== РЕНДЕР ПОЛЬЗОВАТЕЛЕЙ (БЕЗ МГНОВЕННОЙ ЗАГРУЗКИ ТОКЕНОВ) ===== */
+
+function renderUsers(users) {
+    if (!users.length) {
+        usersGrid.innerHTML = `<div class="muted">Ничего не найдено.</div>`;
+        return;
+    }
+
+    usersGrid.innerHTML = "";
 
     for (const user of users) {
         const div = document.createElement("div");
         div.className = "user-card";
+
+        const username = user.username || user.name || user.login || "Без имени";
+
         div.innerHTML = `
             <h3 onclick="openUserInfo('${user.uuid}')" style="cursor:pointer; user-select:none;">
-                ${user.username || user.name || user.login || "Без имени"}
+                ${username}
             </h3>
-            <div id="tokens_${user.uuid}">Загрузка токенов...</div>
-            <br>
-            <button class="btn btn-small" onclick="showCreateToken('${user.uuid}')">Создать токен</button>
+            <div class="muted">UUID: ${user.uuid || "-"}</div>
+
+            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-small" onclick="showCreateToken('${user.uuid}')">Создать токен</button>
+                <button class="btn btn-small" onclick="toggleUserTokens('${user.uuid}')">Токены</button>
+                <button class="btn btn-small" onclick="openUserDiag('${user.uuid}')">Метрики / Логи</button>
+            </div>
+
+            <div id="tokens_${user.uuid}" class="tokens-container" data-loaded="0"
+                 style="display:none; margin-top:10px;"></div>
             <div id="err_${user.uuid}" class="err" style="display:none;"></div>
         `;
-        grid.appendChild(div);
 
-        loadUserTokens(user.uuid);
+        usersGrid.appendChild(div);
     }
 }
 
-async function loadUserTokens(uuid) {
+/* ===== ЛЕНИВАЯ ПОДГРУЗКА ТОКЕНОВ ПОЛЬЗОВАТЕЛЯ ===== */
+
+async function loadUserTokens(uuid, forceReload = false) {
     const container = document.getElementById(`tokens_${uuid}`);
     const errbox = document.getElementById(`err_${uuid}`);
-    if (errbox) { errbox.style.display = "none"; errbox.textContent = ""; }
+    if (!container) return;
 
+    if (errbox) {
+        errbox.style.display = "none";
+        errbox.textContent = "";
+    }
+
+    if (container.dataset.loaded === "1" && !forceReload) {
+        return;
+    }
+
+    container.dataset.loaded = "0";
     container.innerHTML = `<div class="muted">Загрузка токенов...</div>`;
 
     try {
         const data = await apiFetch(`/auth/user/${uuid}`);
         const tokens = data.tokens || [];
 
-        container.innerHTML = "";
-
         if (!tokens.length) {
             container.innerHTML = `<div class="muted">Токенов нет.</div>`;
+            container.dataset.loaded = "1";
             return;
         }
+
+        container.innerHTML = "";
 
         for (const token of tokens) {
             const div = document.createElement("div");
@@ -510,11 +695,16 @@ async function loadUserTokens(uuid) {
                     Уровень: ${token.access_level}<br>
                     ${token.description || ""}
                 </div>
-
-                <button class="btn btn-small" onclick="event.stopPropagation(); deleteToken('${token.uuid}', '${uuid}')">Удалить</button>
+                <button class="btn btn-small"
+                        onclick="event.stopPropagation(); deleteToken('${token.uuid}', '${uuid}')">
+                    Удалить
+                </button>
             `;
             container.appendChild(div);
         }
+
+        container.dataset.loaded = "1";
+
     } catch (e) {
         container.innerHTML = "";
         if (errbox) {
@@ -524,14 +714,33 @@ async function loadUserTokens(uuid) {
     }
 }
 
+function toggleUserTokens(uuid) {
+    const container = document.getElementById(`tokens_${uuid}`);
+    if (!container) return;
+
+    const isVisible = container.style.display !== "none";
+    if (isVisible) {
+        container.style.display = "none";
+        return;
+    }
+
+    container.style.display = "block";
+    loadUserTokens(uuid, false);
+}
+
 async function deleteToken(tokenUuid, userUuid) {
     try {
+        // оставляю твой текущий метод — если на бэке GET удаляет токен
         await apiFetch(`/auth/token/${tokenUuid}`, { method: "GET" });
-        await loadUserTokens(userUuid);
+        await loadUserTokens(userUuid, true);
     } catch (e) {
         alert("Не удалось удалить токен:\n" + e.message);
     }
 }
+
+/* ===== СОЗДАНИЕ ТОКЕНА ===== */
+
+let currentUserForToken = null;
 
 function showCreateToken(userUuid) {
     currentUserForToken = userUuid;
@@ -562,18 +771,14 @@ async function createToken() {
         document.getElementById("tokenDesc").value = "";
         document.getElementById("tokenLevel").value = "";
 
-        loadUserTokens(currentUserForToken);
+        await loadUserTokens(currentUserForToken, true);
 
     } catch (e) {
         alert("Ошибка создания токена:\n" + e.message);
     }
 }
 
-loadOnline();
-setInterval(loadOnline, 15000);
-loadUsers();
-
-let currentUserForToken = null;
+/* ===== МОДАЛКИ ===== */
 
 function openModal(id) {
     document.getElementById(id).classList.remove("hidden");
@@ -583,7 +788,8 @@ function closeModal(id) {
     document.getElementById(id).classList.add("hidden");
 }
 
-/* ===== НОВОЕ: ИНФО О ПОЛЬЗОВАТЕЛЕ ===== */
+/* ===== ИНФО О ПОЛЬЗОВАТЕЛЕ ===== */
+
 async function openUserInfo(uuid) {
     try {
         document.getElementById("modalUserBody").innerHTML = "Загрузка...";
@@ -616,7 +822,8 @@ async function openUserInfo(uuid) {
     }
 }
 
-/* ===== НОВОЕ: ИНФО О ТОКЕНЕ ===== */
+/* ===== ИНФО О ТОКЕНЕ ===== */
+
 async function openTokenInfo(tokenUuid) {
     try {
         document.getElementById("modalTokenBody").innerHTML = "Загрузка...";
@@ -663,6 +870,8 @@ function copyTokenUuid() {
     document.body.removeChild(tmp);
 }
 
+/* ===== СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ ===== */
+
 async function createUser() {
     const username = document.getElementById("newUsername").value.trim();
     if (!username) return alert("Введите имя пользователя");
@@ -677,12 +886,124 @@ async function createUser() {
         closeModal("modalCreateUser");
         document.getElementById("newUsername").value = "";
 
-        loadUsers();
+        // полный reset списка и пагинации
+        allUsers = [];
+        currentPage = 1;
+        usersFinished = false;
+        usersGrid.innerHTML = "";
+        await loadUsersPage();
 
     } catch (e) {
         alert("Ошибка создания пользователя:\n" + e.message);
     }
 }
+
+/* ===== МЕТРИКИ / ЛОГИ ===== */
+
+let currentDiagUser = null;
+
+function openUserDiag(uuid) {
+    currentDiagUser = uuid;
+    document.getElementById("diagBody").innerHTML = "Выберите нужную категорию.";
+    openModal("modalUserDiag");
+}
+
+document.getElementById("btnLoadMetrics").onclick = async () => {
+    if (!currentDiagUser) return;
+
+    document.getElementById("diagBody").innerHTML = "Загрузка метрик...";
+
+    try {
+        const data = await apiFetch(`/metrics/user/${currentDiagUser}/metrics`);
+
+        if (!data.length) {
+            document.getElementById("diagBody").innerHTML =
+                `<div class="muted">Метрики отсутствуют.</div>`;
+            return;
+        }
+
+        document.getElementById("diagBody").innerHTML = data.map(m => `
+            <div class="card" style="margin-bottom:15px;">
+                <b>Plugin ID:</b> ${m.plugin_id}<br>
+                <b>Версия:</b> ${m.version}<br>
+                <b>Cardinal:</b> ${m.cardinal_version || "-"}<br>
+                <b>OS:</b> ${m.os || "-"}<br><br>
+
+                <b>Успешных задач:</b> ${m.tasks_success}<br>
+                <b>Проваленных:</b> ${m.tasks_failed}<br>
+                <b>Ошибок:</b> ${m.errors_total}<br>
+                <b>Uptime:</b> ${m.uptime}s<br>
+                <b>Последний heartbeat:</b> ${m.last_heartbeat}
+            </div>
+        `).join("");
+
+    } catch (e) {
+        document.getElementById("diagBody").innerHTML =
+            `<div class="err">${e.message}</div>`;
+    }
+};
+
+function toMSK(isoTime) {
+    if (!isoTime) return "—";
+
+    try {
+        const date = new Date(isoTime + "Z");
+
+        return date.toLocaleString("ru-RU", {
+            timeZone: "Europe/Moscow",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit"
+        });
+
+    } catch {
+        return isoTime;
+    }
+}
+
+document.getElementById("btnLoadLogs").onclick = async () => {
+    if (!currentDiagUser) return;
+
+    document.getElementById("diagBody").innerHTML = "Загрузка логов...";
+
+    try {
+        const data = await apiFetch(`/metrics/user/${currentDiagUser}/logs`);
+
+        if (!data.length) {
+            document.getElementById("diagBody").innerHTML =
+                `<div class="muted">Логи пусты.</div>`;
+            return;
+        }
+
+        document.getElementById("diagBody").innerHTML = renderColoredLogs(data);
+
+    } catch (e) {
+        document.getElementById("diagBody").innerHTML =
+            `<div class="err">${e.message}</div>`;
+    }
+};
+
+function renderColoredLogs(logs) {
+    return `<div class="terminal-log-wrapper">${logs.map(l => {const iso = l.timestamp || "";const msk = toMSK(iso);return `<div class="terminal-line terminal-${l.level}"><span class="terminal-timestamp">[${msk}]</span><span> [${l.level}] </span>${l.message}</div>`;}).join("")}</div>`;
+}
+
+/* ===== ИНИЦИАЛИЗАЦИЯ: ОНЛАЙН + ПЕРВАЯ СТРАНИЦА + OBSERVER ===== */
+
+loadOnline();
+setInterval(loadOnline, 15000);
+
+loadUsersPage();
+
+const usersObserver = new IntersectionObserver(entries => {
+    const first = entries[0];
+    if (first.isIntersecting && !isSearchActive()) {
+        loadUsersPage();
+    }
+});
+usersObserver.observe(usersSentinel);
 
 </script>
 

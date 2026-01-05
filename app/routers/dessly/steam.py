@@ -5,8 +5,9 @@
 
 from fastapi import APIRouter, Depends, Request, HTTPException
 from app.auth import get_current_user_or_api_token
-from app.dependencies import get_db
-from sqlalchemy.orm import Session
+from app.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
 from cl import logger
@@ -14,7 +15,8 @@ import aiohttp
 
 
 router = APIRouter(prefix="/dessly/steam", tags=["steam"])
-dessly_base_url = "https://desslyhub.com/api/v1/service/steamtopup"
+dessly_base_url_topup = "https://desslyhub.com/api/v1/service/steamtopup"
+dessly_base_url_gift = "https://desslyhub.com/api/v1/service/steamgift"
 
 
 # ==============================
@@ -40,6 +42,31 @@ class topup_steam(BaseModel):
     amount: float
     reference: Optional[str] = None
 
+class get_all_games(BaseModel):
+    """
+    Получение списка игр
+    """
+
+    dessly_token: str
+
+class get_data_game(BaseModel):
+    """
+    Получение данных игры
+    """
+
+    dessly_token: str
+    app_id: str
+
+class steam_gift(BaseModel):
+    """
+    Отправка гифта
+    """
+
+    username: str
+    dessly_token: str
+    amount: float
+    reference: Optional[str] = None
+
 
 # ==============================
 # Проверка логина
@@ -50,7 +77,7 @@ async def check_login_route(
     request: Request,
     payload: check_login,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Проверяет валидность логина и dessly_token для Steam
@@ -59,7 +86,7 @@ async def check_login_route(
     if auth_data["type"] == "admin":
         raise HTTPException(status_code=400, detail="Use API token for this endpoint")
     
-    url = f"{dessly_base_url}/check_login"
+    url = f"{dessly_base_url_topup}/check_login"
     headers = {
         "Content-Type": "application/json",
         "apikey": payload.dessly_token,
@@ -70,7 +97,8 @@ async def check_login_route(
     }
 
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, json=payload, headers=headers) as response:
                 response_data = await response.json()
 
@@ -111,7 +139,7 @@ async def topup_steam_route(
     request: Request,
     payload: topup_steam,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Отправляет запрос на пополнение Steam через API Dessly.
@@ -121,7 +149,7 @@ async def topup_steam_route(
     if auth_data["type"] == "admin":
         raise HTTPException(status_code=400, detail="Use API token for this endpoint")
 
-    url = f"{dessly_base_url}/topup"
+    url = f"{dessly_base_url_topup}/topup"
     headers = {
         "Content-Type": "application/json",
         "apikey": payload.dessly_token,
@@ -133,7 +161,8 @@ async def topup_steam_route(
     }
 
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, json=data, headers=headers) as response:
                 response_data = await response.json()
         
@@ -174,3 +203,115 @@ async def topup_steam_route(
     except Exception as e:
         logger.error(f"Ошибка при запросе к API Dessly (topup): {e}")
         return {"status": False, "error": "connection_error"}
+    
+
+# ==============================
+# Получение списка игр
+# ==============================
+
+@router.post("/games")
+async def games_gift(
+    request: Request,
+    payload: get_all_games,
+    auth_data=Depends(get_current_user_or_api_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Получение списка игр
+    """
+
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    
+    url = f"{dessly_base_url_gift}/games"
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": payload.dessly_token,
+    }
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, headers=headers) as response:
+                response.raise_for_status()
+                response_data = await response.json()
+
+        # Если пришли игры → успех
+        if "games" in response_data:
+            logger.info("Список игр успешно получен")
+            return {"status": True, "error": None, "games": response_data["games"]}
+
+        # Если пришла ошибка → обрабатываем
+        error_code = response_data.get("error_code")
+
+        if error_code == -1:
+            logger.warning("Сервер не ответил")
+            return {"status": False, "error": "server_error", "games": None}
+
+        if error_code == -5:
+            logger.warning("Доступ запрещен")
+            return {"status": False, "error": "access_denied", "games": None}
+
+        # Неизвестный error_code (если появятся новые)
+        logger.error(f"Неизвестная ошибка: {error_code}")
+        return {"status": False, "error": f"unknown_error_{error_code}", "games": None}
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении списка игр Steam: {e}")
+        return {"status": False}
+
+
+# ==============================
+# Получение данных игры
+# ==============================
+
+@router.post("/game")
+async def data_game_gift(
+    request: Request,
+    payload: get_data_game,
+    auth_data=Depends(get_current_user_or_api_token),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Получение данных игры
+    """
+
+    if auth_data["type"] == "admin":
+        raise HTTPException(status_code=400, detail="Use API token for this endpoint")
+    
+    url = f"{dessly_base_url_gift}/games/{payload.app_id}"
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": payload.dessly_token,
+    }
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, headers=headers) as response:
+                response.raise_for_status()
+                response_data = await response.json()
+
+        # Если пришли игры → успех
+        if "game" in response_data:
+            logger.info("Данные игры успешно получены")
+            return {"status": True, "error": None, "game": response_data["game"]}
+
+        # Если пришла ошибка → обрабатываем
+        error_code = response_data.get("error_code")
+
+        if error_code == -1:
+            logger.warning("Сервер не ответил")
+            return {"status": False, "error": "server_error", "games": None}
+
+        if error_code == -5:
+            logger.warning("Доступ запрещен")
+            return {"status": False, "error": "access_denied", "games": None}
+
+        # Неизвестный error_code (если появятся новые)
+        logger.error(f"Неизвестная ошибка: {error_code}")
+        return {"status": False, "error": f"unknown_error_{error_code}", "games": None}
+
+    except Exception as e:
+        logger.error(f"Ошибка при получении данных игры Steam: {e}")
+        return {"status": False}

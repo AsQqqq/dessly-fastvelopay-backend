@@ -10,6 +10,13 @@ from typing import Optional, List, Dict, Any
 from threading import Lock
 from cl import logger
 
+from functools import lru_cache
+from datetime import datetime, timedelta
+
+
+_config_cache = None
+_config_cache_time = None
+
 load_dotenv()
 
 # Роуты для работы с конфигом
@@ -60,9 +67,20 @@ def load_config() -> Dict[str, Any]:
         logger.error("Invalid JSON in config.json")
         config_cache = {}
 
-def get_config_value(key: str, default: Any = None) -> Any:
-    """Получает значение из кэша config."""
-    return config_cache.get(key, default)
+
+def get_config_value(key: str, default=None):
+    global _config_cache, _config_cache_time
+    
+    # Кэш на 60 секунд
+    if (_config_cache is None or 
+        _config_cache_time is None or
+        datetime.now() - _config_cache_time > timedelta(seconds=60)):
+        
+        load_config()
+        _config_cache = config_cache
+        _config_cache_time = datetime.now()
+    
+    return _config_cache.get(key, default)
 
 
 # Инициализируем кэш при старте

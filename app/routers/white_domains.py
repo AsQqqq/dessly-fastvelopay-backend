@@ -8,15 +8,15 @@ from pydantic import BaseModel
 from typing import List
 import re
 import ipaddress
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from cl import logger
 from app.database import WhitelistedEntry
-from app.dependencies import get_db
+from app.database import get_db
 from app.auth import get_current_user_or_api_token, require_access_level, create_audit_record
 
 
 router = APIRouter(prefix="/whitelist", tags=["whitelist"])
-
 
 # ==============================
 # Pydantic-модели
@@ -65,10 +65,11 @@ def validate_value(value: str) -> bool:
 # ==============================
 
 @router.get("/list", response_model=List[WhiteDomainItem])
+# @limiter.limit("100/minute")
 async def list_white_domains(
     request: Request,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Получить список разрешённых IP/доменов (своих, по user_id).
@@ -102,7 +103,7 @@ async def add_white_domain(
     request: Request,
     userid: str,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Добавить IP или домен в белый список (для своего user_id).
@@ -138,7 +139,7 @@ async def add_white_domain(
     db.add(new_entry)
     db.commit()
     db.refresh(new_entry)
-    create_audit_record(db, request, token)  # Добавили аудит для consistency
+    await create_audit_record(db, request, token)  # Добавили аудит для consistency
     logger.info(f"{username} добавил домен/IP в whitelist: {item.value}")
     return WhiteDomainItem.from_orm(new_entry)
 
@@ -148,7 +149,7 @@ async def delete_white_domain(
     entry_uuid: str,
     request: Request,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Удалить IP или домен из белого списка (по UUID).

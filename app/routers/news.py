@@ -3,13 +3,14 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from cl import logger
-from app.auth import get_current_user_or_api_token, generate_api_token, require_access_level, create_audit_record
+from app.auth import get_current_user_or_api_token, generate_api_token, require_access_level
 from app.database import APIToken, User, UserNews, UserNewsRead
-from app.dependencies import get_db
+from app.database import get_db
 from datetime import datetime
 
 
@@ -58,7 +59,7 @@ class NewsOut(BaseModel):
 async def get_news(
     request: Request,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Возвращает список активных новостей.
@@ -102,7 +103,7 @@ async def get_news(
 async def mark_news_as_read(
     news_id: int,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Отмечает новость как прочитанную пользователем.
@@ -138,7 +139,7 @@ async def mark_news_as_read(
 async def create_news(
     news_data: NewsCreate,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Создание новой новости (только для администратора с access_level >= 2)
@@ -179,7 +180,7 @@ async def create_news(
 async def delete_news(
     news_id: int,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     if auth_data["type"] != "api_token":
         raise HTTPException(status_code=400, detail="Use API token for this endpoint")

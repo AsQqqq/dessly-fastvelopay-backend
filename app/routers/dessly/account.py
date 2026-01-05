@@ -4,9 +4,10 @@
 """
 
 from fastapi import APIRouter, Depends, Request, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.auth import get_current_user_or_api_token
-from app.dependencies import get_db
+from app.database import get_db
 from cl import logger
 import aiohttp
 
@@ -24,7 +25,7 @@ dessly_base_url = "https://desslyhub.com/api/v1"
 async def get_balance_route(
     request: Request,
     auth_data=Depends(get_current_user_or_api_token),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Получение баланса аккаунта dessly
